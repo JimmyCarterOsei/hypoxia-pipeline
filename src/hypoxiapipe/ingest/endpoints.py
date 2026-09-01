@@ -11,6 +11,14 @@ Two things this module makes explicit:
 * **Unit conversion is declared, never guessed.** A cohort recording follow-up
   in days looks identical to one recording months until the hazard ratios come
   out wrong. ``time_unit`` is required in the spec.
+* **Censored patients often have their time in a different column.** A cohort
+  recording "time to relapse" has nothing to put there for a patient who never
+  relapsed; their follow-up lives in a separate column. Reading only the
+  event-time column silently drops every censored patient, leaving a cohort
+  where everyone has the event - which looks like a small cohort rather than a
+  broken one. ``censored_time_column`` handles this, and the QC layer fails a
+  cohort whose event rate is implausibly high.
+
 * **Administrative censoring is a recorded transformation.** Capping follow-up
   at five years means a patient who recurs at 70 months becomes an event-free
   observation at 60 - a real change to the data, so it appends a provenance
@@ -41,6 +49,7 @@ class EndpointSpec:
     name: str
     time_column: str
     event_column: str
+    censored_time_column: str | None = None
     time_unit: str = "months"
     event_values: tuple[str, ...] = ()
     censor_values: tuple[str, ...] = ()
@@ -74,10 +83,12 @@ class EndpointSpec:
         cap = raw.get("cap_months")
         if cap is not None and not isinstance(cap, int | float | str):
             raise EndpointError(f"endpoint '{name}': 'cap_months' must be a number")
+        censored = raw.get("censored_time_column")
         return cls(
             name=str(raw.get("name", name)),
             time_column=str(raw["time_column"]),
             event_column=str(raw["event_column"]),
+            censored_time_column=str(censored) if censored else None,
             time_unit=str(raw["time_unit"]),
             event_values=_tokens("event_values"),
             censor_values=_tokens("censor_values"),
@@ -99,7 +110,13 @@ class EndpointReport:
     n_unparsed_event: int
     n_censored_by_cap: int = 0
     cap_months: float | None = None
+    n_time_from_followup: int = 0
     unrecognised_values: tuple[str, ...] = field(default_factory=tuple)
+
+    @property
+    def event_rate(self) -> float:
+        """Fraction of usable observations that are events."""
+        return self.n_events / self.n_usable if self.n_usable else float("nan")
 
     @property
     def n_dropped(self) -> int:
@@ -118,6 +135,8 @@ class EndpointReport:
             "n_dropped_missing": self.n_dropped_missing,
             "n_unparsed_event": self.n_unparsed_event,
             "n_censored_by_cap": self.n_censored_by_cap,
+            "n_time_from_followup": self.n_time_from_followup,
+            "event_rate": round(self.event_rate, 4) if self.n_usable else None,
             "cap_months": self.cap_months,
             "unrecognised_values": list(self.unrecognised_values),
         }
@@ -166,7 +185,10 @@ def derive_endpoint(
     :meth:`Cohort.restrict_to_analysis_set`, so that the count of samples lost
     to a missing endpoint stays visible instead of vanishing silently here.
     """
-    for column in (spec.time_column, spec.event_column):
+    required = [spec.time_column, spec.event_column]
+    if spec.censored_time_column:
+        required.append(spec.censored_time_column)
+    for column in required:
         if column not in clinical.columns:
             raise EndpointError(
                 f"endpoint '{spec.name}': column {column!r} not in clinical table "
@@ -176,6 +198,16 @@ def derive_endpoint(
     out = clinical.copy()
     time = _coerce_time(clinical[spec.time_column], spec.time_unit)
     event, unrecognised = _coerce_event(clinical[spec.event_column], spec)
+
+    # A patient who never had the event has no time-to-event; their follow-up
+    # is recorded elsewhere. Taking it only where the event did not occur keeps
+    # the two columns from ever competing for the same observation.
+    n_from_followup = 0
+    if spec.censored_time_column:
+        followup = _coerce_time(clinical[spec.censored_time_column], spec.time_unit)
+        use_followup = (event == 0) & time.isna() & followup.notna()
+        n_from_followup = int(use_followup.sum())
+        time = time.where(~use_followup, followup)
 
     # An event value that was present but not interpretable is a different
     # problem from one that was simply absent, and is worth reporting apart:
@@ -206,6 +238,7 @@ def derive_endpoint(
         n_unparsed_event=n_unparsed_event,
         n_censored_by_cap=n_capped,
         cap_months=spec.cap_months,
+        n_time_from_followup=n_from_followup,
         unrecognised_values=tuple(unrecognised[:10]),
     )
     return out, report

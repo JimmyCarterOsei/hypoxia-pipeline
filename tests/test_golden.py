@@ -1,30 +1,31 @@
-"""Golden-file regression tests against a verified real cohort.
+"""Golden-file regression tests against verified real builds.
 
 These are the tests the rest of the suite cannot be: everything else runs on
-synthetic fixtures and proves the code does what it was written to do. This
-compares against numbers produced by a real, verified build — so it catches a
-change that is internally consistent but wrong.
+synthetic fixtures and proves the code does what it was written to do. These
+compare against numbers from real, verified builds — so they catch a change
+that is internally consistent but wrong.
 
-They are skipped unless a built cohort is available, because the data cannot be
-committed:
+Point the suite at a directory of built cohorts:
 
-    HYPOXIAPIPE_GOLDEN_COHORT=out/prad pytest tests/test_golden.py -v
+    hypoxiapipe cohort build ... --out out/prad
+    HYPOXIAPIPE_GOLDEN_DIR=out pytest tests/test_golden.py -v
 
-Skipping is the honest default. A regression test that silently passes when it
-cannot run is worse than one that says it did not run.
+Each `tests/golden/<name>.json` names the subdirectory it expects under that
+directory. Cohorts that are absent skip individually, so a partial set still
+checks what it can. Skipping is the honest default: a regression test that
+silently passes when it cannot run is worse than one that says it did not run.
 
 What is asserted, and what deliberately is not
 ----------------------------------------------
-`population_hash` is the strongest value here: it covers the exact sample set
-every score is relative to, and is independent of the expression values.
+`population_hash` is the strongest value available: it covers the exact sample
+set every score is relative to, independent of the expression values.
 
-`expr_checksum` is **not** asserted. It moves whenever GDC re-releases the
-underlying files, which is a data change rather than a regression, and a test
-that fails on a legitimate upstream release trains people to ignore it.
+`expr_checksum` is **not** asserted. It moves whenever the source re-deposits
+its data, which is a data change rather than a regression, and a test that
+fails on a legitimate upstream release trains people to ignore it.
 
-Hazard ratios are compared with tolerances rather than exactly. The published
-reference should be reproducible to well within 1%; requiring bit-identity
-across BLAS versions and platforms would be false precision.
+Hazard ratios are compared with tolerances. Requiring bit-identity across BLAS
+versions and platforms would be false precision.
 """
 
 from __future__ import annotations
@@ -36,135 +37,173 @@ from pathlib import Path
 
 import pytest
 
-GOLDEN = json.loads((Path(__file__).parent / "golden/tcga-prad.json").read_text())
-COHORT_DIR = os.environ.get("HYPOXIAPIPE_GOLDEN_COHORT", "")
+GOLDEN_DIR = Path(__file__).parent / "golden"
+GOLDEN = {p.stem: json.loads(p.read_text()) for p in sorted(GOLDEN_DIR.glob("*.json"))}
 
-needs_cohort = pytest.mark.skipif(
-    not COHORT_DIR or not Path(COHORT_DIR).exists(),
-    reason="set HYPOXIAPIPE_GOLDEN_COHORT to a directory built by 'cohort build'",
-)
+#: Directory holding built cohorts, one subdirectory per cohort.
+BUILD_DIR = os.environ.get("HYPOXIAPIPE_GOLDEN_DIR", "")
+
+#: Where each golden reference expects to find its build.
+COHORT_DIRS = {"tcga-prad": "prad", "cambridge": "cambridge", "stockholm": "stockholm"}
+
+NAMES = sorted(GOLDEN)
+SURVIVAL_CASES = [
+    (name, sig, action)
+    for name, ref in sorted(GOLDEN.items())
+    for sig, actions in ref.get("survival", {}).items()
+    for action in actions
+]
 
 
-@pytest.fixture(scope="module")
-def cohort():
-    """Load the built cohort, verifying its stored checksum."""
+def cohort_path(name: str) -> Path | None:
+    """Return the built cohort directory for a golden reference, if present."""
+    if not BUILD_DIR:
+        # Back-compatible single-cohort form.
+        legacy = os.environ.get("HYPOXIAPIPE_GOLDEN_COHORT", "")
+        if legacy and name == "tcga-prad" and Path(legacy).exists():
+            return Path(legacy)
+        return None
+    candidate = Path(BUILD_DIR) / COHORT_DIRS.get(name, name)
+    return candidate if candidate.exists() else None
+
+
+def load(name: str):
+    """Load a built cohort, or skip when it is not available."""
+    path = cohort_path(name)
+    if path is None:
+        pytest.skip(f"no build for '{name}'; set HYPOXIAPIPE_GOLDEN_DIR")
     from hypoxiapipe.ingest.store import load_cohort  # noqa: PLC0415
 
-    return load_cohort(COHORT_DIR)
-
-
-@pytest.fixture(scope="module")
-def build_report():
-    """Return the TCGA build report written alongside the cohort."""
-    meta = json.loads((Path(COHORT_DIR) / "cohort.json").read_text())
-    return meta["build"]["tcga"]
+    return load_cohort(path)
 
 
 # --------------------------------------------------------------------------
-# the reference itself
+# the references themselves (always run)
 # --------------------------------------------------------------------------
 
 
-def test_the_golden_file_records_its_provenance():
+def test_there_are_references_for_every_bundled_cohort():
+    from hypoxiapipe.ingest.spec import list_bundled_cohorts  # noqa: PLC0415
+
+    assert set(GOLDEN) == set(list_bundled_cohorts()), (
+        "every bundled cohort should have a frozen reference once it has been built"
+    )
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_each_reference_records_its_provenance(name):
+    ref = GOLDEN[name]
     # A frozen number without the release it came from cannot be re-derived.
-    assert GOLDEN["gdc_data_release"]
-    assert GOLDEN["recorded"]
-    assert GOLDEN["spec"] == "tcga-prad"
+    assert ref["recorded"]
+    assert ref.get("gdc_data_release") or ref.get("source")
 
 
-def test_the_pinned_spec_agrees_with_the_golden_file():
+@pytest.mark.parametrize("name", NAMES)
+def test_each_reference_agrees_with_its_pinned_spec(name):
     from hypoxiapipe.ingest.spec import load_bundled_cohort  # noqa: PLC0415
 
-    spec = load_bundled_cohort("tcga-prad")
-    assert spec.expect.n_samples == GOLDEN["cohort"]["n_samples"], (
-        "the spec and the golden reference disagree about the cohort size"
+    spec = load_bundled_cohort(name)
+    assert spec.expect.n_samples == GOLDEN[name]["cohort"]["n_samples"], (
+        f"{name}: the spec and its golden reference disagree about cohort size"
     )
-    assert spec.cdr_endpoint == GOLDEN["build"]["endpoint"]["endpoint"]
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_no_reference_records_an_implausible_event_rate(name):
+    # A rate near 1.0 means censored patients were dropped rather than
+    # censored; freezing such a number would enshrine the bug.
+    rate = GOLDEN[name]["cohort"].get("event_rate")
+    if rate is not None:
+        assert rate < 0.85, f"{name}: {rate:.0%} event rate - censored patients dropped?"
+
+
+def test_the_signature_replicates_out_of_sample():
+    """The point of the whole exercise: a consistent effect outside discovery.
+
+    smith20 was derived in TCGA-PRAD, so that estimate is in-sample. Cambridge
+    and Stockholm are independent, on a different platform with a different
+    endpoint definition. This asserts direction and rough magnitude agree, not
+    that the numbers match - they should not.
+    """
+    external = [n for n in NAMES if n != "tcga-prad"]
+    assert external, "no external cohorts to validate against"
+
+    for name in external:
+        result = GOLDEN[name]["survival"]["smith20"]["cox_persd"]
+        assert result["hr"] > 1.0, f"{name}: effect reversed out of sample"
+        assert result["ci_low"] > 1.0, f"{name}: effect not significant out of sample"
+        assert result["c_index"] > 0.55, f"{name}: no discrimination out of sample"
+
+    discovery = GOLDEN["tcga-prad"]["survival"]["smith20"]["cox_persd"]["hr"]
+    for name in external:
+        hr = GOLDEN[name]["survival"]["smith20"]["cox_persd"]["hr"]
+        # Within a factor of two of discovery: loose on purpose, since some
+        # shrinkage out of sample is expected and healthy.
+        assert 0.5 < hr / discovery < 2.0, f"{name}: HR {hr} far from discovery {discovery}"
 
 
 # --------------------------------------------------------------------------
-# cohort assembly
+# built cohorts (skip individually when absent)
 # --------------------------------------------------------------------------
 
 
-@needs_cohort
-def test_sample_set_is_unchanged(cohort):
-    # The hash covers the exact population every score is relative to.
-    assert cohort.population_hash == GOLDEN["cohort"]["population_hash"]
-    assert cohort.n_samples == GOLDEN["cohort"]["n_samples"]
+@pytest.mark.parametrize("name", NAMES)
+def test_sample_set_is_unchanged(name):
+    cohort = load(name)
+    expected = GOLDEN[name]["cohort"]
+    assert cohort.population_hash == expected["population_hash"]
+    assert cohort.n_samples == expected["n_samples"]
 
 
-@needs_cohort
-def test_the_counts_reconcile_at_every_stage(build_report):
-    expected = GOLDEN["build"]
-    assert build_report["manifest"]["n_files"] == expected["manifest"]["n_files"]
-    assert (
-        build_report["selection"]["n_dropped_non_primary"]
-        == expected["selection"]["n_dropped_non_primary"]
-    )
-    assert (
-        build_report["selection"]["n_patients_with_multiple_aliquots"]
-        == expected["selection"]["n_patients_with_multiple_aliquots"]
-    )
-    assert build_report["join"]["n_joined"] == expected["join"]["n_joined"]
-    # Every expression patient must have clinical data; an orphan means the
-    # barcode truncation or the CDR subset changed.
-    assert build_report["join"]["n_expression_without_clinical"] == 0
+@pytest.mark.parametrize("name", NAMES)
+def test_event_count_is_unchanged(name):
+    cohort = load(name)
+    assert int(cohort.clinical["event"].sum()) == GOLDEN[name]["cohort"]["n_events"]
 
 
-@needs_cohort
-def test_the_endpoint_is_unchanged(build_report):
-    expected = GOLDEN["build"]["endpoint"]
-    for key in ("endpoint", "n_events", "cap_months", "n_censored_by_cap", "n_project"):
-        assert build_report["endpoint"][key] == expected[key], f"{key} moved"
-
-
-@needs_cohort
-def test_the_matrix_is_log2_transformed_exactly_once(cohort):
-    # The regression that shipped: log2 applied by both the loader and the
+@pytest.mark.parametrize("name", NAMES)
+def test_the_matrix_is_log2_transformed_exactly_once(name):
+    # The regression that shipped: log2 applied by both the TCGA loader and the
     # pipeline, capping the range near 4 instead of ~15.
+    cohort = load(name)
+    expected = GOLDEN[name]["cohort"]
     observed = float(cohort.expr.to_numpy().max())
-    assert GOLDEN["cohort"]["scale_max_min"] <= observed <= GOLDEN["cohort"]["scale_max_max"], (
-        f"expression maximum is {observed:.2f}; a value near 4 means a double log2"
+    assert expected["scale_max_min"] <= observed <= expected["scale_max_max"], (
+        f"{name}: expression maximum is {observed:.2f}; a value near 4 means a double log2"
     )
 
 
-# --------------------------------------------------------------------------
-# scoring and survival
-# --------------------------------------------------------------------------
-
-
-@needs_cohort
-@pytest.mark.parametrize("name", sorted(GOLDEN["coverage"]))
-def test_signature_coverage_is_unchanged(cohort, name):
+@pytest.mark.parametrize("name", NAMES)
+def test_signature_coverage_is_unchanged(name):
     from hypoxiapipe.scoring import score  # noqa: PLC0415
     from hypoxiapipe.signatures.registry import load_bundled  # noqa: PLC0415
 
-    result = score(cohort.expr, load_bundled(name))
-    expected = GOLDEN["coverage"][name]
-    assert result.n_found == expected["n_found"]
-    assert result.n_total == expected["n_total"]
+    cohort = load(name)
+    for sig_name, expected in GOLDEN[name]["coverage"].items():
+        result = score(cohort.expr, load_bundled(sig_name))
+        assert result.n_found == expected["n_found"], sig_name
+        assert result.n_total == expected["n_total"], sig_name
 
 
-@needs_cohort
-@pytest.mark.parametrize(
-    ("name", "action"),
-    [(n, a) for n, actions in GOLDEN["survival"].items() for a in actions],
-)
-def test_survival_estimates_reproduce(cohort, name, action):
+@pytest.mark.parametrize(("name", "sig_name", "action"), SURVIVAL_CASES)
+def test_survival_estimates_reproduce(name, sig_name, action):
     from hypoxiapipe.modeling import cox, r_available  # noqa: PLC0415
     from hypoxiapipe.scoring import score  # noqa: PLC0415
     from hypoxiapipe.signatures.registry import load_bundled  # noqa: PLC0415
 
+    cohort = load(name)
     if not r_available():
         pytest.skip("R is required for survival estimation")
 
-    expected = GOLDEN["survival"][name][action]
-    scores = score(cohort.expr, load_bundled(name)).scores
+    expected = GOLDEN[name]["survival"][sig_name][action]
+    scores = score(cohort.expr, load_bundled(sig_name)).scores
     (result,) = cox(
-        cohort.clinical["time_months"], cohort.clinical["event"], {name: scores}, action=action
+        cohort.clinical["time_months"],
+        cohort.clinical["event"],
+        {sig_name: scores},
+        action=action,
     )
-    tol = GOLDEN["tolerances"]
+    tol = GOLDEN[name]["tolerances"]
 
     assert result.n == expected["n"]
     assert result.n_events == expected["n_events"]

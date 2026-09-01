@@ -22,6 +22,10 @@ from hypoxiapipe.ingest.cohort import Cohort
 from hypoxiapipe.qc.platform import ScaleReport, infer_scale
 from hypoxiapipe.signatures.registry import Signature
 
+#: Above this fraction of events, a cohort is far more likely to be broken than
+#: remarkable. Real prognostic cohorts rarely exceed ~60% even at long follow-up.
+MAX_PLAUSIBLE_EVENT_RATE = 0.85
+
 
 class Level(StrEnum):
     """Severity of a QC finding."""
@@ -223,6 +227,28 @@ def run_qc(
                     "quartile analysis is underpowered and per-SD Cox should lead",
                     n_events=n_events,
                 )
+
+            # An implausibly high event rate almost always means censored
+            # patients were dropped rather than censored - typically because
+            # their follow-up time lives in a different column from the
+            # time-to-event, so they came through as unusable. The result looks
+            # like a small cohort, not a broken one, so it has to be checked.
+            n_scored = int(events.notna().sum())
+            if n_scored:
+                rate = n_events / n_scored
+                rep.summary["event_rate"] = round(rate, 4)
+                if rate >= MAX_PLAUSIBLE_EVENT_RATE:
+                    rep.add(
+                        Level.FAIL,
+                        "event_rate",
+                        f"{rate:.0%} of samples are events ({n_events}/{n_scored}). "
+                        "Censored patients are probably being dropped: check whether "
+                        "follow-up time is recorded in a separate column from "
+                        "time-to-event, and set endpoint.censored_time_column",
+                        event_rate=round(rate, 4),
+                        n_events=n_events,
+                        n_scored=n_scored,
+                    )
 
     for sig in signatures or []:
         found = [g for g in sig.genes if g in expr.index]

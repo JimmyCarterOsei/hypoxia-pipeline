@@ -1,0 +1,50 @@
+{
+  "_comment": [
+    "Frozen reference for a verified build, recorded 2026-09-01.",
+    "",
+    "No cohort data is stored - only counts, hashes and fitted statistics.",
+    "population_hash is asserted (it covers the exact sample set every score is",
+    "relative to); expr_checksum is not, because it moves whenever the source",
+    "re-deposits the data, which is a data change rather than a regression.",
+    "",
+    "92 samples with 40 events (43.5%). An event rate near 100% here",
+    "would mean censored patients are being dropped rather than censored -",
+    "see the censored_time_column note in the spec."
+  ],
+  "recorded": "2026-09-01",
+  "source": "GEO GSE70769",
+  "spec": "stockholm",
+  "cohort": {
+    "n_samples": 92,
+    "n_events": 40,
+    "event_rate": 0.4348,
+    "population_hash": "sha256:f58c57961fe23241ec34e7b4d56914a3e15efa866e263278a74aa1d3cbf20ffb",
+    "min_genes": 20000,
+    "scale_max_min": 12.0,
+    "scale_max_max": 20.0
+  },
+  "coverage": {
+    "smith20": {
+      "n_found": 19,
+      "n_total": 20
+    }
+  },
+  "survival": {
+    "smith20": {
+      "cox_persd": {
+        "hr": 1.748692,
+        "ci_low": 1.282215,
+        "ci_high": 2.384875,
+        "p": 0.000415,
+        "c_index": 0.605338,
+        "n": 92,
+        "n_events": 40
+      }
+    }
+  },
+  "tolerances": {
+    "hr_rel": 0.01,
+    "c_index_abs": 0.005,
+    "p_log10_abs": 0.3
+  }
+}

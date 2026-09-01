@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -385,3 +386,91 @@ def test_only_cambridge_filters_benign_tissue():
     stockholm = " ".join(f.describe() for f in load_bundled_cohort("stockholm").sample_filters)
     assert "sample_type" in cambridge
     assert "sample_type" not in stockholm
+
+
+# --------------------------------------------------------------------------
+# censored patients keep their follow-up time
+# --------------------------------------------------------------------------
+
+
+def test_censored_patients_take_their_time_from_the_followup_column():
+    """Regression: a 100% event rate caused by dropping every censored patient.
+
+    GSE70768/70769 record time-to-BCR only for patients who relapsed. Reading
+    that column alone leaves the relapsers and discards everyone else, which
+    looks like a small cohort rather than a broken one.
+    """
+    from hypoxiapipe.ingest.endpoints import EndpointSpec, derive_endpoint  # noqa: PLC0415
+
+    clinical = pd.DataFrame(
+        {
+            "bcr": ["Y", "N", "N", "Y"],
+            "time_to_bcr": ["12", "N/A", "N/A", "30"],
+            "followup": ["12", "64.5", "58.1", "30"],
+        },
+        index=["S1", "S2", "S3", "S4"],
+    )
+    spec = EndpointSpec(
+        name="BCR",
+        time_column="time_to_bcr",
+        censored_time_column="followup",
+        event_column="bcr",
+        time_unit="months",
+        event_values=("y",),
+        censor_values=("n",),
+    )
+    out, report = derive_endpoint(clinical, spec)
+
+    assert report.n_usable == 4, "censored patients must survive with their follow-up"
+    assert report.n_events == 2
+    assert report.n_time_from_followup == 2
+    assert report.event_rate == 0.5
+    assert out.loc["S2", "time_months"] == pytest.approx(64.5)
+
+
+def test_the_followup_column_never_overrides_a_real_event_time():
+    from hypoxiapipe.ingest.endpoints import EndpointSpec, derive_endpoint  # noqa: PLC0415
+
+    clinical = pd.DataFrame({"bcr": ["Y"], "time_to_bcr": ["12"], "followup": ["64"]}, index=["S1"])
+    spec = EndpointSpec(
+        name="BCR",
+        time_column="time_to_bcr",
+        censored_time_column="followup",
+        event_column="bcr",
+        time_unit="months",
+        event_values=("y",),
+        censor_values=("n",),
+    )
+    out, report = derive_endpoint(clinical, spec)
+    assert out.loc["S1", "time_months"] == pytest.approx(12.0)
+    assert report.n_time_from_followup == 0
+
+
+def test_an_implausible_event_rate_fails_qc():
+    """100% events is far more likely to be a bug than a finding."""
+    from hypoxiapipe.ingest.cohort import Cohort, Provenance  # noqa: PLC0415
+    from hypoxiapipe.qc.report import run_qc  # noqa: PLC0415
+
+    n = 40
+    expr = pd.DataFrame(
+        np.random.default_rng(0).normal(8, 1, (50, n)),
+        index=[f"G{i}" for i in range(50)],
+        columns=[f"S{i}" for i in range(n)],
+    )
+    clinical = pd.DataFrame({"time_months": [12.0] * n, "event": [1.0] * n}, index=expr.columns)
+    cohort = Cohort(
+        name="Broken", expr=expr, clinical=clinical, provenance=Provenance(source="local")
+    )
+    report = run_qc(cohort, event_col="event", min_samples=10)
+    codes = [f.code for f in report.findings]
+    assert "event_rate" in codes
+    assert not report.ok
+
+
+def test_the_geo_specs_read_followup_time_for_censored_patients():
+    from hypoxiapipe.ingest.spec import load_bundled_cohort  # noqa: PLC0415
+
+    for name in ("cambridge", "stockholm"):
+        spec = load_bundled_cohort(name)
+        assert spec.endpoint is not None
+        assert spec.endpoint.censored_time_column == "total_follow_up_(months)", name

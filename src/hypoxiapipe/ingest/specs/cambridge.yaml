@@ -25,18 +25,26 @@ sample_filters:
 endpoint:
   name: BCR (5-year capped)
   time_column: time_to_bcr_(months)
+  # Patients who never relapsed have no time-to-BCR; their follow-up is here.
+  # Without this, every censored patient is dropped as unusable and the cohort
+  # comes through with a ~100% event rate - which reads as a small cohort
+  # rather than a broken one.
+  censored_time_column: total_follow_up_(months)
   event_column: biochemical_relapse_(bcr)
   time_unit: months
   event_values: ["y", "yes", "1"]
   censor_values: ["n", "no", "0"]
   cap_months: 60
 
+# Verified build, 2026-09-01: 111 samples, 19 events after filtering,
+# endpoint derivation and analysis-set restriction.
 expect:
+  n_samples: 111
   min_genes: 10000
 
 notes: >
-  Cambridge prostate cohort (Ross-Adams 2015). Sample count intentionally
-  unpinned until a verified build: pin expect.n_samples once you have one, so
-  a re-deposited series fails the build rather than shifting every number.
+  Cambridge prostate cohort (Ross-Adams 2015). n_samples is pinned to a verified
+  build, so a re-deposited series fails the build rather than shifting every
+  number.
   Samples with 'N/A' for relapse or time drop out at the analysis-set step and
   are counted in the endpoint report.

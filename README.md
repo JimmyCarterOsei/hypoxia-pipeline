@@ -125,7 +125,7 @@ Two images, not one:
 
 ```bash
 make images
-export HYPOXIAPIPE_R_COMMAND="docker run --rm -i ghcr.io/jimmycarterosei/hypoxiapipe-r:TAG"
+export HYPOXIAPIPE_R_COMMAND="docker run --rm -i ghcr.io/OWNER/hypoxiapipe-r:TAG"
 hypoxiapipe model validate out/prad -s smith20      # survival runs in the R image
 ```
 
@@ -165,6 +165,21 @@ Failures terminate rather than retry: `-resume` makes re-running a long ingest c
 silently retrying a failure is worse than stopping and showing it. Every run writes a
 timeline, report, trace and DAG into `results/pipeline_info/`, alongside the per-step
 manifests the package itself writes.
+
+## Result
+
+smith20 was derived in TCGA-PRAD, so that cohort is in-sample. Cambridge and
+Stockholm are independent — a different platform, a different endpoint definition:
+
+| cohort | n | events | HR per SD | 95% CI | P | C-index |
+|---|---|---|---|---|---|---|
+| TCGA-PRAD (discovery) | 497 | 87 | 1.93 | 1.54–2.42 | 1.5e-8 | 0.662 |
+| Cambridge | 111 | 19 | 1.87 | 1.16–2.99 | 0.0097 | 0.651 |
+| Stockholm | 92 | 40 | 1.75 | 1.28–2.38 | 0.00042 | 0.605 |
+
+Cambridge has 19 events, so its interval is wide and QC warns that a quartile
+analysis there is underpowered; per-SD leads. All three are reproducible from
+their accessions by the commands above, and frozen in `tests/golden/`.
 
 ## Golden references
 
@@ -244,8 +259,9 @@ provenance (content hashing, run manifests, verification); modelling (frozen pre
 coxnet, random survival forest, nested CV, R survival bridge); containers and CI
 (split Python/R images, GHCR publishing, pluggable R transport); Nextflow DSL2
 orchestration with an offline test profile that runs the full DAG in ~20s.
-265 tests, all offline, plus golden-file regression tests against a verified
-TCGA-PRAD build (GDC release 46.0). Decisions recorded in [docs/adr](docs/adr/).
+287 tests, all offline, plus golden-file regression tests against verified
+builds of all three cohorts (TCGA-PRAD on GDC release 46.0, Cambridge and
+Stockholm from GEO). Decisions recorded in [docs/adr](docs/adr/).
 MLflow/API and cloud execution follow.
 
 DuckDB is deliberately not built yet: a metadata store that nothing queries is decoration,
