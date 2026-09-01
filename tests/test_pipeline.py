@@ -354,15 +354,34 @@ def test_filters_are_recorded_in_provenance():
     assert any(r and "sample_type" in r for r in reasons)
 
 
-def test_the_geo_specs_filter_out_benign_and_crpc_samples():
-    """Both series deposit benign and castrate-resistant tissue alongside tumours."""
+def test_the_geo_specs_use_the_verified_endpoint_columns():
+    """Both series encode the endpoint identically, verified against GEO."""
     from hypoxiapipe.ingest.spec import load_bundled_cohort  # noqa: PLC0415
 
     for name in ("cambridge", "stockholm"):
         spec = load_bundled_cohort(name)
-        described = " ".join(f.describe() for f in spec.sample_filters)
-        assert "sample_type" in described, f"{name} does not exclude benign tissue"
-        assert "CRPC" in described, f"{name} does not exclude castrate-resistant samples"
         assert spec.endpoint is not None
         assert spec.endpoint.time_column == "time_to_bcr_(months)"
         assert spec.endpoint.event_column == "biochemical_relapse_(bcr)"
+        assert spec.endpoint.cap_months == 60
+        # A CRPC guard on both: it drops nothing in Stockholm today, and
+        # reports a count if a re-deposit ever adds advanced disease.
+        described = " ".join(f.describe() for f in spec.sample_filters)
+        assert "CRPC" in described, f"{name} has no castrate-resistant guard"
+
+
+def test_only_cambridge_filters_benign_tissue():
+    """The two series differ despite one publication and one platform.
+
+    Cambridge deposits benign comparison tissue and carries a `sample_type`
+    column; Stockholm deposits only primary tumours and has no such column, so
+    copying Cambridge's filter across would fail at build time. Their other
+    characteristic keys differ in spelling too. This is the case for declaring
+    columns per cohort instead of sharing one schema.
+    """
+    from hypoxiapipe.ingest.spec import load_bundled_cohort  # noqa: PLC0415
+
+    cambridge = " ".join(f.describe() for f in load_bundled_cohort("cambridge").sample_filters)
+    stockholm = " ".join(f.describe() for f in load_bundled_cohort("stockholm").sample_filters)
+    assert "sample_type" in cambridge
+    assert "sample_type" not in stockholm

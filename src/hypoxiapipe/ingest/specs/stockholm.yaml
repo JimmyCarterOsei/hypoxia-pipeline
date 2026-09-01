@@ -7,20 +7,21 @@ collapse_rule: max_mean
 multi_probe_rule: drop
 log2_transform: null        # null = infer from the observed value range
 
-# Column names copied from the verified Cambridge spec (same submission).
-# UNVERIFIED for this series - confirm with 'hypoxiapipe cohort inspect
-# stockholm' before trusting a build. Originally confirmed for Cambridge via
-# 'hypoxiapipe cohort inspect stockholm'. GEO characteristic keys are derived
-# from submitter free text, so they cannot be guessed - these are verbatim.
+# Column names confirmed against the real series matrix on 2026-09-01 via
+# 'hypoxiapipe cohort inspect stockholm'. Verbatim - GEO characteristic keys
+# come from submitter free text and cannot be guessed.
 #
-# The series holds 199 samples, not 199 primary tumours: benign comparison
-# tissue and castrate-resistant (CRPC) samples are deposited alongside. Both
-# must go before scoring. Benign tissue widens every gene's dynamic range,
-# which shifts the cohort-relative z-scores of the tumours; CRPC is a different
-# disease state whose recurrence endpoint does not mean the same thing.
+# Unlike Cambridge (same publication, same platform), this series deposits
+# only primary tumours: 94 samples, all robotic radical prostatectomy, with no
+# sample_type column at all. Its other keys differ too - here
+# 'extra_capsular_extension_(ece)' with an underscore where Cambridge has a
+# hyphen. Same submitters, one paper, different spellings; this is why the
+# columns are declared per cohort rather than shared.
+#
+# The CRPC guard is kept as a cheap assertion: it drops nothing today, and
+# reports a non-zero count if a future re-deposit adds advanced-disease
+# samples to the series.
 sample_filters:
-  - column: sample_type
-    keep: [Tumour]
   - column: title
     drop_contains: [CRPC]
 
@@ -37,8 +38,8 @@ expect:
   min_genes: 10000
 
 notes: >
-  Stockholm prostate cohort (Ross-Adams 2015), same platform as Cambridge. Sample count intentionally
-  unpinned until a verified build: pin expect.n_samples once you have one, so
+  Stockholm prostate cohort (Ross-Adams 2015), same platform as Cambridge.
+  Sample count intentionally unpinned until a verified build: pin expect.n_samples once you have one, so
   a re-deposited series fails the build rather than shifting every number.
   Samples with 'N/A' for relapse or time drop out at the analysis-set step and
   are counted in the endpoint report.
