@@ -5,10 +5,10 @@
 # One job: read a JSON request on stdin, fit the survival model, write a JSON
 # response on stdout. Nothing else is installed and nothing is exposed.
 #
-#   docker run --rm -i ghcr.io/JimmyCarterOsei/hypoxiapipe-r:TAG < request.json
+#   docker run --rm -i ghcr.io/jimmycarterosei/hypoxiapipe-r:TAG < request.json
 #
 # From the Python side, set:
-#   HYPOXIAPIPE_R_COMMAND="docker run --rm -i ghcr.io/JimmyCarterOsei/hypoxiapipe-r:TAG"
+#   HYPOXIAPIPE_R_COMMAND="docker run --rm -i ghcr.io/jimmycarterosei/hypoxiapipe-r:TAG"
 #
 # rocker/r-ver pins the R version *and* an RSPM snapshot date, so package
 # versions are fixed by the base image rather than by whatever CRAN served on

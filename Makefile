@@ -1,6 +1,6 @@
 # Convenience targets. Nothing here is required - CI calls the same commands.
-IMAGE_PY  ?= ghcr.io/JimmyCarterOsei/hypoxiapipe
-IMAGE_R   ?= ghcr.io/JimmyCarterOsei/hypoxiapipe-r
+IMAGE_PY  ?= ghcr.io/jimmycarterosei/hypoxiapipe
+IMAGE_R   ?= ghcr.io/jimmycarterosei/hypoxiapipe-r
 TAG       ?= dev
 
 .PHONY: help test lint typecheck check images image-py image-r smoke clean

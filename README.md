@@ -125,7 +125,7 @@ Two images, not one:
 
 ```bash
 make images
-export HYPOXIAPIPE_R_COMMAND="docker run --rm -i ghcr.io/JimmyCarterOsei/hypoxiapipe-r:TAG"
+export HYPOXIAPIPE_R_COMMAND="docker run --rm -i ghcr.io/jimmycarterosei/hypoxiapipe-r:TAG"
 hypoxiapipe model validate out/prad -s smith20      # survival runs in the R image
 ```
 
