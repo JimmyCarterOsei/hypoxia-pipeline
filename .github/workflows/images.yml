@@ -127,11 +127,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: pip install -e ".[dev]"
+
+      - name: Lowercase the registry namespace
+        # docker/metadata-action lowercases image names for the build jobs, but
+        # this reference is assembled by hand and github.repository_owner keeps
+        # its original case. Container registries reject anything else.
+        run: echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
       - name: Cross-container survival call
         env:
           HYPOXIAPIPE_R_COMMAND: >-
             docker run --rm -i
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/hypoxiapipe-r:sha-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/hypoxiapipe-r:sha-${{ github.sha }}
         run: |
           python -c "
           import json
