@@ -88,6 +88,12 @@ jobs:
           sudo apt-get install -y -q r-base-core r-cran-jsonlite
       - run: pip install -e ".[dev]"
       - name: Install Nextflow
+        # Pinned, not latest. An unpinned installer silently upgraded to 26.x,
+        # whose rewritten parser rejected syntax that 24.x accepted - the build
+        # broke without a commit touching it. The DSL is tested against both,
+        # but the version CI uses should be a decision, not a download.
+        env:
+          NXF_VER: 24.10.4
         run: |
           curl -fsSL https://get.nextflow.io | bash
           sudo mv nextflow /usr/local/bin/
@@ -97,7 +103,10 @@ jobs:
       - name: Run the workflow
         # -profile test uses the locally installed package rather than the
         # images, so this job stays independent of the image build.
+        env:
+          NXF_VER: 24.10.4
         run: nextflow run workflow/main.nf -profile test -ansi-log false
+
       - name: Check the published results
         run: |
           set -euo pipefail
@@ -112,9 +121,24 @@ jobs:
           print(results[['cohort', 'action', 'name', 'hr', 'p']].to_string(index=False))
           "
       - name: Resume is a no-op on an unchanged run
+        env:
+          NXF_VER: 24.10.4
         run: |
           nextflow run workflow/main.nf -profile test -resume -ansi-log false 2>&1 | tee resume.log
-          grep -q "cached: 1" resume.log
+          # With -ansi-log false the summary line is absent; each reused task
+          # prints "Cached process >" instead.
+          test "$(grep -c 'Cached process' resume.log)" -ge 5
+      - name: Forward compatibility with the current Nextflow release
+        # Allowed to fail. An unpinned installer already broke this build once
+        # by upgrading to a parser that rejected valid 24.x syntax; knowing
+        # early is useful, failing the build over someone else's release is not.
+        # Runs last and writes elsewhere, so it cannot disturb the assertions above.
+        continue-on-error: true
+        run: |
+          nextflow run workflow/main.nf -profile test -ansi-log false \
+            --outdir results-latest -work-dir work-latest
+          test -s results-latest/results.tsv
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:

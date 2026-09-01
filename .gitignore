@@ -14,7 +14,7 @@ work/
 .nextflow*
 results/
 results-test/
+results-latest/
+work-latest/
 tests/fixtures/workflow/cache/
 tests/fixtures/workflow/demo_cohort.yaml
-out/
-prad.yaml

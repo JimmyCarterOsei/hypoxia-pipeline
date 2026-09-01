@@ -103,15 +103,22 @@ workflow {
     }
 
     VERIFY_MANIFESTS(BUILD_COHORT.out.cohort.map { _name, dir -> dir }.collect())
-}
 
-workflow.onComplete {
-    log.info """
-    ${'='*70}
-    ${workflow.success ? 'Completed' : 'FAILED'} in ${workflow.duration}
-    Published to: ${params.outdir}
-    Run name:     ${workflow.runName}
-    Commit:       ${workflow.commitId ?: 'not a git checkout'}
-    ${'='*70}
-    """.stripIndent()
+    // Registered inside the entry workflow, not at script level: the parser
+    // introduced in Nextflow 25 rejects top-level statements mixed with
+    // declarations. The metadata is captured first because `workflow` does not
+    // resolve inside the handler's closure there - it would be null at run time,
+    // which compiles cleanly and then throws after every process has succeeded.
+    def meta = workflow
+    def outdir = params.outdir
+    meta.onComplete {
+        log.info """
+        ${'='*70}
+        ${meta.success ? 'Completed' : 'FAILED'} in ${meta.duration}
+        Published to: ${outdir}
+        Run name:     ${meta.runName}
+        Commit:       ${meta.commitId ?: 'not a git checkout'}
+        ${'='*70}
+        """.stripIndent()
+    }
 }
