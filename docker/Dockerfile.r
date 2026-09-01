@@ -5,10 +5,10 @@
 # One job: read a JSON request on stdin, fit the survival model, write a JSON
 # response on stdout. Nothing else is installed and nothing is exposed.
 #
-#   docker run --rm -i ghcr.io/OWNER/hypoxiapipe-r:TAG < request.json
+#   docker run --rm -i ghcr.io/JimmyCarterOsei/hypoxiapipe-r:TAG < request.json
 #
 # From the Python side, set:
-#   HYPOXIAPIPE_R_COMMAND="docker run --rm -i ghcr.io/OWNER/hypoxiapipe-r:TAG"
+#   HYPOXIAPIPE_R_COMMAND="docker run --rm -i ghcr.io/JimmyCarterOsei/hypoxiapipe-r:TAG"
 #
 # rocker/r-ver pins the R version *and* an RSPM snapshot date, so package
 # versions are fixed by the base image rather than by whatever CRAN served on
@@ -19,7 +19,7 @@ FROM rocker/r-ver:4.3.3
 
 LABEL org.opencontainers.image.title="hypoxiapipe-r" \
       org.opencontainers.image.description="Survival estimation worker (R survival package)" \
-      org.opencontainers.image.source="https://github.com/OWNER/hypoxia-pipeline" \
+      org.opencontainers.image.source="https://github.com/JimmyCarterOsei/hypoxia-pipeline" \
       org.opencontainers.image.licenses="MIT"
 
 # `survival` ships with R; installing it explicitly pins it via the snapshot.

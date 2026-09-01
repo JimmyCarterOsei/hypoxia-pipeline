@@ -44,7 +44,7 @@ FROM python:3.12-slim-bookworm AS runtime
 
 LABEL org.opencontainers.image.title="hypoxiapipe" \
       org.opencontainers.image.description="Provenance-aware transcriptomic signature pipeline (Python stage)" \
-      org.opencontainers.image.source="https://github.com/OWNER/hypoxia-pipeline" \
+      org.opencontainers.image.source="https://github.com/JimmyCarterOsei/hypoxia-pipeline" \
       org.opencontainers.image.licenses="MIT"
 
 COPY --from=build /opt/venv /opt/venv
