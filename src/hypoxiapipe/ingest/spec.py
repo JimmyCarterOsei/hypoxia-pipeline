@@ -136,7 +136,9 @@ def _parse(raw: dict[str, Any], origin: str) -> CohortSpec:
         endpoint=endpoint,
         sample_filters=filters,
         expect=expect,
-        symbol_authority=raw.get("symbol_authority"),
+        # str(): an unquoted YAML date parses as datetime.date, which formats
+        # identically in a filename and compares unequal to the string.
+        symbol_authority=(str(raw["symbol_authority"]) if raw.get("symbol_authority") else None),
         collapse_rule=str(raw.get("collapse_rule", "max_mean")),
         multi_probe_rule=str(raw.get("multi_probe_rule", "drop")),
         log2_transform=raw.get("log2_transform"),

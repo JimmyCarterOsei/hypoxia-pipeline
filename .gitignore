@@ -5,9 +5,14 @@ __pycache__/
 .ruff_cache/
 dist/
 .venv/
+# Cohort data must never be committed, but packaged data files must be. A bare
+# *.tsv rule excluded the HGNC alias table from the repository, so a fresh
+# clone could not harmonise symbols at all - and the failure surfaced three
+# layers away, inside a workflow process.
 *.tsv
 *.csv
 !tests/fixtures/*.tsv
+!src/hypoxiapipe/harmonise/data/*.tsv
 
 # Nextflow
 work/
@@ -18,3 +23,7 @@ results-latest/
 work-latest/
 tests/fixtures/workflow/cache/
 tests/fixtures/workflow/demo_cohort.yaml
+out/
+prad.yaml
+out/
+prad.yaml

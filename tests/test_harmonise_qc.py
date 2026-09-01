@@ -339,3 +339,64 @@ def test_samples_missing_signature_genes_are_flagged():
     findings = run_qc(cohort, signatures=[sig], min_samples=10).findings
     flagged = [f for f in findings if f.code.startswith("signature_missing")]
     assert flagged and flagged[0].detail["n_samples_incomplete"] == 1
+
+
+def test_every_declared_alias_release_has_an_installed_file():
+    """Regression: the alias tables were excluded from the repo by a *.tsv rule.
+
+    The package declares checksums for each bundled release, but the tables are
+    data files that a broad ignore rule can silently drop. A fresh clone then
+    installs cleanly, passes import, and fails three layers down inside a
+    pipeline run. This asserts the declaration and the installation agree.
+    """
+    from importlib import resources  # noqa: PLC0415
+
+    from hypoxiapipe.harmonise.aliases import BUNDLED_CHECKSUMS, load_table  # noqa: PLC0415
+
+    files = {f.name for f in resources.files("hypoxiapipe.harmonise.data").iterdir()}
+    for release in BUNDLED_CHECKSUMS:
+        assert f"hgnc_aliases_{release}.tsv" in files, (
+            f"release {release} is declared but its table is not installed"
+        )
+        assert load_table(release=release).n_entries > 0
+
+
+def test_a_missing_release_is_reported_against_what_is_installed():
+    from hypoxiapipe.errors import AliasTableError  # noqa: PLC0415
+    from hypoxiapipe.harmonise.aliases import load_table  # noqa: PLC0415
+
+    with pytest.raises(AliasTableError, match="installed:"):
+        load_table(release="1999-01-01")
+
+
+def test_a_missing_alias_table_says_the_data_is_missing_not_the_release():
+    """The unhelpful version of this error listed the release it could not find.
+
+    An installation whose package data is absent should say so, rather than
+    reporting the requested release as both missing and available.
+    """
+    from hypoxiapipe.errors import AliasTableError  # noqa: PLC0415
+    from hypoxiapipe.harmonise.aliases import load_table  # noqa: PLC0415
+
+    with pytest.raises(AliasTableError) as excinfo:
+        load_table(release="1999-01-01")
+    message = str(excinfo.value)
+    assert "1999-01-01" in message
+    # It must name what is actually installed, so the two cannot look identical.
+    assert "2024-07-01" in message
+
+
+def test_the_bundled_alias_table_is_installed_alongside_the_package():
+    """Guards against the data file being ignored by version control.
+
+    A `*.tsv` rule once excluded this table from the repository, so a fresh
+    clone installed a package that could not harmonise anything.
+    """
+    from importlib import resources  # noqa: PLC0415
+
+    files = [
+        f.name
+        for f in resources.files("hypoxiapipe.harmonise.data").iterdir()
+        if f.name.endswith(".tsv")
+    ]
+    assert files, "no alias table is installed with the package"

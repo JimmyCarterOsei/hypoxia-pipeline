@@ -100,10 +100,33 @@ def load_table(
             n_entries=len(mapping),
         )
 
-    ref = resources.files(_DATA_PACKAGE).joinpath(f"hgnc_aliases_{release}.tsv")
-    if not ref.is_file():
-        available = sorted(BUNDLED_CHECKSUMS)
-        raise AliasTableError(f"no bundled alias table for release {release!r} (have: {available})")
+    # Located by iterating the data package rather than by joinpath().is_file().
+    # Under an editable install `resources.files()` can return a MultiplexedPath
+    # whose joinpath().is_file() reports False for a file that iterdir() plainly
+    # lists - which produced the memorable error "no bundled alias table for
+    # release '2024-07-01' (installed: ['2024-07-01'])". Iteration is the form
+    # that works in both layouts.
+    wanted = f"hgnc_aliases_{release}.tsv"
+    ref = next((f for f in resources.files(_DATA_PACKAGE).iterdir() if f.name == wanted), None)
+    if ref is None or not ref.is_file():
+        # List the files that exist, not the releases a constant says should:
+        # an installation missing its data reported the absent release as
+        # available, which is the least useful thing it could have said.
+        present = sorted(
+            f.name.removeprefix("hgnc_aliases_").removesuffix(".tsv")
+            for f in resources.files(_DATA_PACKAGE).iterdir()
+            if f.name.startswith("hgnc_aliases_") and f.name.endswith(".tsv")
+        )
+        declared = sorted(BUNDLED_CHECKSUMS)
+        if not present:
+            raise AliasTableError(
+                f"no alias table files are installed (declared releases: {declared}). "
+                "The package data is missing - check the installation, and that the "
+                "tables are tracked in version control rather than ignored."
+            )
+        raise AliasTableError(
+            f"no bundled alias table for release {release!r} (installed: {present})"
+        )
     text = ref.read_text()
     actual = checksum_text(text)
     if verify:

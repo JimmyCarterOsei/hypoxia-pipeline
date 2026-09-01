@@ -1,0 +1,35 @@
+# Curated subset of HGNC symbol changes relevant to hypoxia / DNA-repair /
+# proliferation signatures used in this project.
+#
+# PROVENANCE: this is a hand-curated subset, NOT the full HGNC download.
+# It is committed so tests and CI are deterministic and offline. To build the
+# complete table for a run, use tools/fetch_hgnc.py, which downloads the
+# official HGNC complete set, writes the same TSV layout, and prints the
+# checksum to pin in specs and manifests.
+#
+# columns: alias	approved	kind	note
+alias	approved	kind	note
+AK3L1	AK4	previous	renamed; appears as AK3L1 in Buffa 2010
+C3orf28	FAM162A	previous	renamed; appears as C3orf28 in older hypoxia sets
+ERO1L	ERO1A	previous	renamed
+CYR61	CCN1	previous	CCN family renaming; appears as CYR61 in Yang 2018
+CTGF	CCN2	previous	CCN family renaming
+NOV	CCN3	previous	CCN family renaming
+WISP1	CCN4	previous	CCN family renaming
+HIG2	HILPDA	previous	renamed; appears as HIG2 in older sets
+C12orf5	TIGAR	previous	renamed
+KIAA0101	PCLAF	previous	renamed
+BHLHB2	BHLHE40	previous	renamed
+PPAP2B	PLPP3	previous	renamed
+HN1	JPT1	previous	renamed
+TCEB1	ELOC	previous	renamed
+GPR56	ADGRG1	previous	renamed
+MLLT4	AFDN	previous	renamed
+WHSC1	NSD2	previous	renamed
+FAM64A	PIMREG	previous	renamed
+ADCK3	COQ8A	previous	renamed
+KIAA1524	CIP2A	previous	renamed
+GARS	GARS1	previous	renamed
+ADSS	ADSS2	previous	renamed
+SEPT9	SEPTIN9	previous	renamed; also the classic Excel date-mangling target
+MARCH6	MARCHF6	previous	renamed; also Excel-mangled
