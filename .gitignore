@@ -1,0 +1,20 @@
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+.venv/
+*.tsv
+*.csv
+!tests/fixtures/*.tsv
+
+# Nextflow
+work/
+.nextflow*
+results/
+results-test/
+tests/fixtures/workflow/cache/
+tests/fixtures/workflow/demo_cohort.yaml
+out/
+prad.yaml

@@ -1,0 +1,25 @@
+name: toustrup15
+source:
+  doi: 10.1158/0008-5472.CAN-11-1182
+  citation: Toustrup et al. Cancer Res 2011;71:5923-5931
+scoring: rowmean
+genes:
+- ADM
+- ALDOA
+- ANKRD37
+- BNIP3
+- BNIP3L
+- FAM162A
+- EGLN3
+- KCTD11
+- LOX
+- NDRG1
+- P4HA1
+- P4HA2
+- PDK1
+- PFKFB3
+- SLC2A1
+notes: Head & neck, oxygen-electrode validated. FAM162A appears as C3orf28 in older sources (same gene)
+  - matrices using the old symbol will drop it silently without alias mapping.
+checksum: sha256:e300e4033cadb09cf99c28d66e82edada9e07022ced92ad4b9cdc03fe10a8fb5
+symbol_authority: HGNC 2024-07-01

@@ -1,0 +1,44 @@
+name: ragnum32
+source:
+  doi: 10.1038/bjc.2014.604
+  table: Table 2
+  citation: Ragnum et al. Br J Cancer 2015;112:382-390
+scoring: rowmean
+genes:
+- ASF1B
+- ASPM
+- BIRC5
+- BUB3
+- CENPE
+- CENPU
+- CMTM3
+- DONSON
+- DTL
+- FOXM1
+- G6PD
+- HJURP
+- MCM2
+- MEP1A
+- MTMR2
+- TRIP13
+- ZWINT
+- TDG
+- UNG
+- XRCC6
+- ADM
+- DDIT4
+- DSP
+- FER1L4
+- HILPDA
+- P4HA1
+- PGAM4
+- PKM
+- RIMKLA
+- RNASE4
+- SCD
+- SPAG4
+notes: 'Pimonidazole-derived. Composition: 17 proliferation / 3 DNA repair / 12 hypoxia response. Verified
+  gene-by-gene against Table 2 and cross-checked against the Di Giovannantonio compendium (32/32). FER1L4
+  (pseudogene) and PGAM4 (retrogene) drop on some platforms.'
+checksum: sha256:8f61699512413c34448e35fe73e387d6e5329d8b90f3f50c7e8b05099c4c5c35
+symbol_authority: HGNC 2024-07-01

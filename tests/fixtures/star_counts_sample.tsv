@@ -1,0 +1,11 @@
+# gene-model: GENCODE v36
+gene_id	gene_name	gene_type	unstranded	stranded_first	stranded_second	tpm_unstranded	fpkm_unstranded	fpkm_uq_unstranded
+N_unmapped			1000	1000	1000			
+N_multimapping			500	500	500			
+N_noFeature			200	200	200			
+N_ambiguous			100	100	100			
+ENSG00000149925.17	ALDOA	protein_coding	5000	2500	2500	120.5	60.2	70.1
+ENSG00000163170.11	BOP1	protein_coding	300	150	150	8.4	4.1	5.0
+ENSG00000117020.15	AKT3	protein_coding	150	75	75	3.2	1.5	1.9
+ENSG00000271043.2	ALDOA	protein_coding	50	25	25	1.1	0.5	0.6
+ENSG00000106366.9	SERPINE1	protein_coding	900	450	450	22.7	11.0	13.0

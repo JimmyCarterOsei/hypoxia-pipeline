@@ -1,0 +1,46 @@
+name: TCGA-PRAD
+source: tcga
+accession: TCGA-PRAD
+workflow: STAR - Counts
+star_value_column: tpm_unstranded
+symbol_authority: "2024-07-01"
+collapse_rule: max_mean
+
+# Aliquot -> patient. "first" keeps the first barcode in sorted order for the
+# handful of patients with several aliquots; "mean" averages them.
+primary_tumours_only: true
+duplicate_aliquot_rule: first
+
+# STAR TPM is linear, so the pipeline log2-transforms it.
+log2_transform: true
+
+# GDC clinical carries no usable recurrence endpoint for PRAD, and overall
+# survival has roughly a dozen events across ~500 patients. Liu et al.
+# (Cell 2018) recommend PFI for this tumour type. The CDR table is a
+# supplementary file from that paper and is not redistributed - point
+# clinical_path at your own copy.
+clinical_source: cdr
+clinical_path: data/TCGA-CDR-SupplementalTableS1.xlsx
+cdr_endpoint: PFI
+
+endpoint:
+  name: PFI (5-year capped)
+  time_column: PFI.time
+  event_column: PFI
+  time_unit: days
+  cap_months: 60
+
+# Verified against GDC Data Release 46.0 (2026-08-10) on 2026-09-01:
+# 554 files -> 501 primary tumours (53 non-primary dropped) -> 497 patients
+# (4 contributed two aliquots) -> 497 joined to CDR clinical, 0 orphans.
+expect:
+  n_samples: 497
+  min_genes: 15000
+  min_events: 80
+
+notes: >
+  Discovery cohort. n_samples is pinned to a verified build, so a later GDC
+  release changing the file set fails loudly instead of shifting every number.
+  If it fails, confirm whether the release moved before editing this figure.
+  tolerate_file_failures stays at 0 - a cohort quietly missing samples is a
+  different cohort from the one the manifest describes.

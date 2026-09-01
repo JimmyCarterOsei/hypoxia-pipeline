@@ -1,0 +1,30 @@
+name: smith20
+source:
+  description: 20-gene prostate hypoxia signature (Osei/Smith, Bangor)
+  derivation: 508 candidates from 70 published signatures (Di Giovannantonio 2025) -> co-expression ->
+    univariate Cox -> frequency filter, TCGA-PRAD
+scoring: rowmean
+genes:
+- ABCB6
+- ALDOA
+- AMH
+- ANKZF1
+- ANLN
+- COL5A1
+- ESRP1
+- FAM216A
+- GAL3ST1
+- HMMR
+- IGFBP3
+- KDM3A
+- LOXL2
+- PPFIA4
+- PPP2R5B
+- SLC16A1
+- SLC6A8
+- STC2
+- WSB1
+- YEATS2
+notes: Derived on TCGA-PRAD (discovery); external validation MSKCC/Cambridge/Stockholm.
+checksum: sha256:034a14859d93b10f9ec26c8244f3c1a4406d2e5d3616ad255c36fd9714d175b6
+symbol_authority: HGNC 2024-07-01

@@ -1,0 +1,24 @@
+name: Stockholm
+source: geo
+accession: GSE70769
+platform: GPL10558
+symbol_authority: "2024-07-01"
+collapse_rule: max_mean
+multi_probe_rule: drop
+log2_transform: null
+
+endpoint:
+  name: BCR (5-year capped)
+  time_column: bcr_free_time
+  event_column: bcr_status
+  time_unit: months
+  event_values: ["1", "yes", "bcr"]
+  censor_values: ["0", "no", "ned"]
+  cap_months: 60
+
+expect:
+  min_genes: 10000
+
+notes: >
+  Stockholm prostate cohort (Ross-Adams 2015), same platform as Cambridge.
+  Endpoint column names unverified - see the Cambridge spec note.

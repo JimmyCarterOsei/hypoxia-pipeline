@@ -1,0 +1,99 @@
+{
+  "_comment": [
+    "Frozen reference for a verified TCGA-PRAD build. Recorded 2026-09-01",
+    "against GDC Data Release 46.0 and the TCGA-CDR supplement (Liu 2018).",
+    "",
+    "No cohort data is stored here - only counts, hashes and fitted",
+    "statistics, which is what makes this checkable without redistributing",
+    "controlled or bulky files. tests/test_golden.py compares a freshly",
+    "built cohort against it and skips when none is available.",
+    "",
+    "population_hash is the strongest single value: it covers the exact",
+    "sample set every score is relative to, and is independent of the",
+    "expression values themselves. expr_checksum is deliberately NOT",
+    "asserted - it moves whenever GDC re-releases the underlying files,",
+    "which is a data change, not a regression.",
+    "",
+    "scale_max_* is a wide band on purpose. It exists to separate a correctly",
+    "log2'd matrix (max ~16.6 here; peak TPM ~102k, normal in prostate where",
+    "KLK3 dominates) from a double-logged one (max ~4). Note the QC report's",
+    "range line is computed on a 200k-value subsample, so it reads lower than",
+    "the true maximum - expr_max below is the exact figure."
+  ],
+  "recorded": "2026-09-01",
+  "gdc_data_release": "46.0",
+  "spec": "tcga-prad",
+  "build": {
+    "manifest": {
+      "n_files": 554,
+      "n_patients_in_manifest": 497
+    },
+    "selection": {
+      "n_dropped_non_primary": 53,
+      "n_patients_with_multiple_aliquots": 4,
+      "duplicate_aliquot_rule": "first",
+      "n_patients": 497
+    },
+    "join": {
+      "n_expression_patients": 497,
+      "n_clinical_patients": 500,
+      "n_joined": 497,
+      "n_expression_without_clinical": 0
+    },
+    "endpoint": {
+      "source": "TCGA-CDR",
+      "endpoint": "PFI",
+      "n_rows": 11160,
+      "n_project": 500,
+      "n_usable": 500,
+      "n_events": 87,
+      "cap_months": 60.0,
+      "n_censored_by_cap": 6
+    }
+  },
+  "cohort": {
+    "n_samples": 497,
+    "n_events": 87,
+    "population_hash": "sha256:20c367000df58f41f3b614f2b609d6609d49ce2ee8b58a4de750d7299b4aca98",
+    "scale_max_min": 12.0,
+    "scale_max_max": 20.0,
+    "expr_max": 16.638956
+  },
+  "coverage": {
+    "smith20": {
+      "n_found": 20,
+      "n_total": 20
+    }
+  },
+  "survival": {
+    "smith20": {
+      "cox_persd": {
+        "hr": 1.927884,
+        "ci_low": 1.536105,
+        "ci_high": 2.419586,
+        "p": 1.48427e-08,
+        "c_index": 0.661739,
+        "n": 497,
+        "n_events": 87
+      },
+      "quartile": {
+        "hr": 3.448293,
+        "ci_low": 1.874643,
+        "ci_high": 6.342925,
+        "p": 6.9e-05,
+        "c_index": 0.656891,
+        "n": 250,
+        "n_events": 54,
+        "n_q1": 125,
+        "n_q4": 125,
+        "events_q1": 14,
+        "events_q4": 40
+      }
+    }
+  },
+  "tolerances": {
+    "hr_rel": 0.01,
+    "c_index_abs": 0.005,
+    "p_log10_abs": 0.3
+  }
+}

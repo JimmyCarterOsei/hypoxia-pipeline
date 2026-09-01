@@ -1,0 +1,12 @@
+name: buffa51
+source:
+  doi: 10.1038/sj.bjc.6605450
+  citation: Buffa et al. Br J Cancer 2010;102:428-435
+  compendium: Di Giovannantonio 2025 (PMID 39892389) - version matching Veracyte Meta855
+scoring: rowmean
+genes: []
+checksum: null
+notes: 'INCOMPLETE BY DESIGN. Fill genes from the verified compendium version in results/signature_gene_vectors.rds
+  (confirmed to reproduce the Veracyte 4-gene overlap: ALDOA/ANLN/ESRP1/SLC16A1) via tools/export_specs_from_rds.R,
+  then hash with ''hypoxiapipe sig hash''. Registry refuses to load until then.'
+symbol_authority: HGNC 2024-07-01

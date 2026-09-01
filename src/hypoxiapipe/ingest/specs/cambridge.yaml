@@ -1,0 +1,27 @@
+name: Cambridge
+source: geo
+accession: GSE70768
+platform: GPL10558          # Illumina HumanHT-12 V4.0 - matrix is probe-indexed
+symbol_authority: "2024-07-01"
+collapse_rule: max_mean
+multi_probe_rule: drop
+log2_transform: null        # null = infer from the observed value range
+
+endpoint:
+  name: BCR (5-year capped)
+  time_column: bcr_free_time
+  event_column: bcr_status
+  time_unit: months
+  event_values: ["1", "yes", "bcr"]
+  censor_values: ["0", "no", "ned"]
+  cap_months: 60
+
+expect:
+  min_genes: 10000
+
+notes: >
+  Cambridge prostate cohort (Ross-Adams 2015). The endpoint column names must be
+  confirmed against the parsed clinical table before this spec is trusted - GEO
+  characteristic keys are derived from free text and vary by submission. Run
+  'hypoxiapipe cohort inspect cambridge' to list the columns actually present,
+  then pin n_samples in expect once the build is verified.

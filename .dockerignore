@@ -1,0 +1,21 @@
+# Build context hygiene: a fat context slows every build and risks baking data
+# or credentials into a layer.
+.git
+.github
+.venv
+.cache
+data
+out
+outputs
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+*.egg-info
+htmlcov
+.coverage
+# Cohort data must never enter an image.
+*.parquet
+*.rds
+*.xlsx

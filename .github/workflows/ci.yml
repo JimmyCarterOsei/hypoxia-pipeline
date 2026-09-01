@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install R for the survival stage
+        # Survival estimation runs in R by design; the parity and Cox tests
+        # skip without it, so CI installs it rather than silently covering less.
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q r-base-core r-cran-jsonlite
+          Rscript -e 'quit(status = as.integer(!requireNamespace("survival", quietly = TRUE)))'
+      - run: pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check src tests
+      - name: Format check
+        run: ruff format --check src tests
+      - name: Type check
+        run: mypy
+      - name: Verify all bundled signature checksums
+        run: |
+          for f in src/hypoxiapipe/signatures/specs/*.yaml; do
+            case "$f" in *buffa51*) continue;; esac
+            hypoxiapipe sig verify "$f"
+          done
+      - name: Verify all bundled cohort specs parse
+        run: hypoxiapipe cohort list
+      - name: Check the ADR index matches the records
+        run: pytest tests/test_adrs.py -q
+      - name: Golden reference is internally consistent
+        # The data-dependent assertions skip without a built cohort; these
+        # check the reference agrees with the pinned spec, which always runs.
+        run: pytest tests/test_golden.py -q
+      - name: Tests
+        # tests/conftest.py blocks outbound sockets for the whole session, so a
+        # test that starts reaching for NCBI fails here rather than in a year.
+        run: pytest --cov=hypoxiapipe --cov-report=term-missing
+
+      - name: Survival stage reachable over a configured transport
+        # The same code path the containerised stage uses, without needing a
+        # daemon here: the contract is stdin/stdout, so a wrapper script proves
+        # the transport indirection works. The images themselves are built and
+        # smoke-tested in images.yml.
+        env:
+          HYPOXIAPIPE_R_COMMAND: >-
+            Rscript --vanilla src/hypoxiapipe/modeling/r/survival_worker.R
+        run: |
+          python -c "
+          import json
+          from hypoxiapipe.modeling import cox
+          request = json.load(open('tests/fixtures/r_request.json'))
+          result = cox(request['time'], request['event'], request['scores'])[0]
+          assert result.n == 120 and result.hr > 1, result
+          print('transport OK: HR', round(result.hr, 3))
+          "
+
+  workflow:
+    # Runs the Nextflow DAG end to end, offline, in about a minute. Static
+    # checks in tests/test_workflow.py catch a missing container directive;
+    # only an actual run catches a channel wired to the wrong output.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install R for the survival stage
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q r-base-core r-cran-jsonlite
+      - run: pip install -e ".[dev]"
+      - name: Install Nextflow
+        run: |
+          curl -fsSL https://get.nextflow.io | bash
+          sudo mv nextflow /usr/local/bin/
+          nextflow -version
+      - name: Generate workflow fixtures
+        run: python tools/make_test_fixtures.py
+      - name: Run the workflow
+        # -profile test uses the locally installed package rather than the
+        # images, so this job stays independent of the image build.
+        run: nextflow run workflow/main.nf -profile test -ansi-log false
+      - name: Check the published results
+        run: |
+          set -euo pipefail
+          test -s results-test/results.tsv
+          test -s results-test/verification.md
+          grep -q "Result: PASS" results-test/verification.md
+          python -c "
+          import pandas as pd
+          results = pd.read_csv('results-test/results.tsv', sep='\t')
+          assert {'cohort', 'action', 'hr'} <= set(results.columns), results.columns
+          assert len(results) >= 2, results
+          print(results[['cohort', 'action', 'name', 'hr', 'p']].to_string(index=False))
+          "
+      - name: Resume is a no-op on an unchanged run
+        run: |
+          nextflow run workflow/main.nf -profile test -resume -ansi-log false 2>&1 | tee resume.log
+          grep -q "cached: 1" resume.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: workflow-results
+          path: |
+            results-test/
+            .nextflow.log

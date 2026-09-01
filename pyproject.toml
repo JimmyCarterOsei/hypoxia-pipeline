@@ -1,0 +1,66 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hypoxiapipe"
+version = "0.1.0"
+description = "Reproducible transcriptomic signature scoring with content-addressed signature provenance"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Jimmy Carter Osei" }]
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "pyyaml>=6.0",
+    "typer>=0.12",
+    "pyarrow>=15.0",
+    "scikit-survival>=0.22",
+    # cdr.py reads the TCGA-CDR Excel supplement; the bundled PRAD spec points
+    # at an .xlsx, so this is a default-path dependency, not an optional one.
+    "openpyxl>=3.1",
+    # Homebrew/framework Pythons on macOS often ship without a usable CA
+    # bundle, which surfaces as a TLS failure in the GDC fetchers.
+    "certifi>=2024.2.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-cov", "hypothesis", "ruff", "mypy", "pre-commit"]
+
+[project.scripts]
+hypoxiapipe = "hypoxiapipe.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hypoxiapipe"]
+# The R worker ships inside the wheel; the bridge resolves it via importlib.
+artifacts = ["src/hypoxiapipe/modeling/r/*.R"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "N", "D"]
+ignore = ["D203", "D213"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test names are the documentation; a docstring restating the name adds noise.
+"tests/*" = ["D100", "D101", "D102", "D103", "D104"]
+# Typer's whole calling convention is callables in argument defaults.
+"src/hypoxiapipe/cli.py" = ["B008"]
+
+[tool.mypy]
+strict = true
+packages = ["hypoxiapipe"]
+mypy_path = "src"
+
+# scikit-learn and scikit-survival ship no type information. Ignoring their
+# missing stubs is narrower than loosening strictness for our own code.
+[[tool.mypy.overrides]]
+module = ["sklearn.*", "sksurv.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

@@ -1,0 +1,74 @@
+# syntax=docker/dockerfile:1.7
+###############################################################################
+# hypoxiapipe - Python stage
+#
+# Ingest, QC, harmonisation, scoring, modelling and provenance. No R: survival
+# estimation runs in the companion image (docker/Dockerfile.r), reached over
+# the JSON stdin/stdout contract via HYPOXIAPIPE_R_COMMAND.
+#
+# Two images rather than one is a deliberate choice. A single container holding
+# Python, R, and every system library either of them needs is larger, slower to
+# rebuild, and hides which stage actually depends on what - and it makes the
+# Nextflow per-process container in Phase 7 pointless, because every process
+# would run the same image.
+#
+# Base images are pinned by digest in CI (see .github/workflows/images.yml).
+# A floating tag means "reproducible" only until the tag moves.
+###############################################################################
+
+# ---------------------------------------------------------------- build stage
+FROM python:3.12-slim-bookworm AS build
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /build
+
+# Build-only toolchain: scikit-survival compiles extensions on platforms with
+# no wheel. None of this is carried into the runtime image.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential \
+ && rm -rf /var/lib/apt/lists/*
+
+# Dependency metadata first, so a source-only change does not invalidate the
+# dependency layer.
+COPY pyproject.toml README.md ./
+COPY src ./src
+
+RUN python -m venv /opt/venv \
+ && /opt/venv/bin/pip install --upgrade pip \
+ && /opt/venv/bin/pip install .
+
+# -------------------------------------------------------------- runtime stage
+FROM python:3.12-slim-bookworm AS runtime
+
+LABEL org.opencontainers.image.title="hypoxiapipe" \
+      org.opencontainers.image.description="Provenance-aware transcriptomic signature pipeline (Python stage)" \
+      org.opencontainers.image.source="https://github.com/OWNER/hypoxia-pipeline" \
+      org.opencontainers.image.licenses="MIT"
+
+COPY --from=build /opt/venv /opt/venv
+
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HYPOXIAPIPE_CACHE=/data/cache
+
+# Runs as a non-root user: nothing in this pipeline needs root, and a container
+# that writes root-owned files into a mounted directory is a nuisance to whoever
+# has to clean up after it.
+RUN useradd --create-home --uid 1000 pipeline \
+ && mkdir -p /data/cache /work \
+ && chown -R pipeline:pipeline /data /work
+
+USER pipeline
+WORKDIR /work
+
+# Fail the build if the entry point is broken, rather than at run time.
+RUN hypoxiapipe sig list > /dev/null
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD hypoxiapipe sig list > /dev/null || exit 1
+
+ENTRYPOINT ["hypoxiapipe"]
+CMD ["--help"]

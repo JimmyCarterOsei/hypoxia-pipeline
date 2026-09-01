@@ -1,0 +1,69 @@
+name: yang28
+source:
+  doi: 10.1016/j.ebiom.2018.04.019
+  table: Supplementary Table 5
+  citation: Yang et al. EBioMedicine 2018;31:182-189
+scoring: weighted
+genes:
+- ADAMTS4
+- ATF3
+- BHLHE40
+- BTG2
+- CSRNP1
+- CYR61
+- EGR1
+- EGR2
+- EGR3
+- FOSB
+- FOSL2
+- GEM
+- JUNB
+- KLF10
+- KLF6
+- LIF
+- MCL1
+- NR4A3
+- PPP1R15A
+- RHOB
+- SELE
+- SIK1
+- SLC2A14
+- SLC2A3
+- SOCS3
+- THBS1
+- TIPARP
+- ZFP36
+coefficients:
+  ADAMTS4: 0.208143369
+  ATF3: -0.182281129
+  BHLHE40: 0.145486214
+  BTG2: -0.383633755
+  CSRNP1: 0.064308417
+  CYR61: 0.40495632
+  EGR1: -0.396671892
+  EGR2: 0.314855084
+  EGR3: -0.298747262
+  FOSB: -0.042448357
+  FOSL2: 0.176084142
+  GEM: -0.138491418
+  JUNB: 0.213008876
+  KLF10: -0.183908536
+  KLF6: 0.208046534
+  LIF: 0.325537409
+  MCL1: 0.306647257
+  NR4A3: -0.059548777
+  PPP1R15A: -0.006602269
+  RHOB: 0.220516453
+  SELE: -0.103118261
+  SIK1: 0.290011507
+  SLC2A14: 0.196779232
+  SLC2A3: -0.28084907
+  SOCS3: 0.088841536
+  THBS1: -0.162059422
+  TIPARP: -0.553245162
+  ZFP36: -0.14218079
+notes: 'Directionally mixed: MUST be scored weighted; unweighted averaging cancels (verified: unweighted
+  null, weighted HR 1.63 in TCGA). Compendium carries only a 14-gene subset - do not source Yang from
+  the compendium.'
+checksum: sha256:b5a681449acf493b3396148481a6a6f4f0b0e555ca7b4418ca076c1ab33732d3
+symbol_authority: HGNC 2024-07-01
