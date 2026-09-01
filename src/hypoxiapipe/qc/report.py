@@ -160,6 +160,10 @@ def run_qc(
             max=rep.scale.maximum,
         )
 
+    # Reported unconditionally: a value below the failure threshold is still
+    # worth seeing, and a count that is only checked is a count nobody reads.
+    rep.summary["frac_missing"] = round(float(expr.isna().to_numpy().mean()), 6)
+
     gene_na = expr.isna().mean(axis=1)
     bad_genes = gene_na[gene_na > max_gene_na]
     if len(bad_genes):
@@ -254,6 +258,18 @@ def run_qc(
         found = [g for g in sig.genes if g in expr.index]
         coverage = len(found) / sig.n_genes
         missing = [g for g in sig.genes if g not in expr.index]
+        if found:
+            incomplete = int(expr.loc[found].isna().any(axis=0).sum())
+            if incomplete:
+                rep.add(
+                    Level.WARN,
+                    f"signature_missing:{sig.name}",
+                    f"{sig.name}: {incomplete} samples have a missing value among the "
+                    "signature genes present; rowmean and z-scoring skip NaN, so those "
+                    "samples are scored on fewer genes than the rest",
+                    n_samples_incomplete=incomplete,
+                )
+
         level = Level.INFO if coverage >= min_coverage else Level.WARN
         rep.add(
             level,

@@ -35,6 +35,7 @@ import math
 import os
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 GOLDEN_DIR = Path(__file__).parent / "golden"
@@ -167,7 +168,9 @@ def test_the_matrix_is_log2_transformed_exactly_once(name):
     # pipeline, capping the range near 4 instead of ~15.
     cohort = load(name)
     expected = GOLDEN[name]["cohort"]
-    observed = float(cohort.expr.to_numpy().max())
+    # nanmax, not max: array expression matrices carry a scattering of missing
+    # probe values, and plain max would propagate them and report nan.
+    observed = float(np.nanmax(cohort.expr.to_numpy()))
     assert expected["scale_max_min"] <= observed <= expected["scale_max_max"], (
         f"{name}: expression maximum is {observed:.2f}; a value near 4 means a double log2"
     )

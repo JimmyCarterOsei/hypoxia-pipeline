@@ -275,3 +275,67 @@ def test_a_sampled_scale_range_is_labelled_as_sampled():
     report = infer_scale(large, sample_n=1000)
     assert report.sampled is True
     assert report.to_dict()["range_is_sampled"] is True
+
+
+def test_missingness_is_reported_even_when_it_passes():
+    """A count that is only checked is a count nobody reads."""
+    import numpy as np  # noqa: PLC0415
+    import pandas as pd  # noqa: PLC0415
+
+    from hypoxiapipe.ingest.cohort import Cohort, Provenance  # noqa: PLC0415
+    from hypoxiapipe.qc.report import run_qc  # noqa: PLC0415
+
+    expr = pd.DataFrame(
+        np.random.default_rng(0).normal(8, 1, (40, 40)),
+        index=[f"G{i}" for i in range(40)],
+        columns=[f"S{i}" for i in range(40)],
+    )
+    expr.iloc[0, 0] = np.nan  # far below any failure threshold
+    cohort = Cohort(
+        name="Sparse",
+        expr=expr,
+        clinical=pd.DataFrame(index=expr.columns),
+        provenance=Provenance(source="local"),
+    )
+    report = run_qc(cohort, min_samples=10)
+    assert report.ok
+    assert report.summary["frac_missing"] > 0
+
+
+def test_samples_missing_signature_genes_are_flagged():
+    """rowmean and z-scoring skip NaN, so such samples use fewer genes silently."""
+    import numpy as np  # noqa: PLC0415
+    import pandas as pd  # noqa: PLC0415
+
+    from hypoxiapipe.ingest.cohort import Cohort, Provenance  # noqa: PLC0415
+    from hypoxiapipe.qc.report import run_qc  # noqa: PLC0415
+    from hypoxiapipe.signatures.registry import load_bundled  # noqa: PLC0415
+
+    sig = load_bundled("smith20")
+    expr = pd.DataFrame(
+        np.random.default_rng(0).normal(8, 1, (len(sig.genes), 40)),
+        index=list(sig.genes),
+        columns=[f"S{i}" for i in range(40)],
+    )
+    cohort = Cohort(
+        name="Complete",
+        expr=expr,
+        clinical=pd.DataFrame(index=expr.columns),
+        provenance=Provenance(source="local"),
+    )
+    assert not any(
+        f.code.startswith("signature_missing")
+        for f in run_qc(cohort, signatures=[sig], min_samples=10).findings
+    )
+
+    holed = expr.copy()
+    holed.iloc[0, 0] = np.nan
+    cohort = Cohort(
+        name="Holed",
+        expr=holed,
+        clinical=pd.DataFrame(index=holed.columns),
+        provenance=Provenance(source="local"),
+    )
+    findings = run_qc(cohort, signatures=[sig], min_samples=10).findings
+    flagged = [f for f in findings if f.code.startswith("signature_missing")]
+    assert flagged and flagged[0].detail["n_samples_incomplete"] == 1
