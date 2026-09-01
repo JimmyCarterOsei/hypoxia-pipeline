@@ -23,6 +23,7 @@ import yaml
 
 from hypoxiapipe.errors import IngestError
 from hypoxiapipe.ingest.endpoints import EndpointSpec
+from hypoxiapipe.ingest.filters import SampleFilter
 
 _SPEC_PACKAGE = "hypoxiapipe.ingest.specs"
 SOURCES = ("geo", "tcga", "local")
@@ -63,6 +64,7 @@ class CohortSpec:
     accession: str | None = None
     platform: str | None = None
     endpoint: EndpointSpec | None = None
+    sample_filters: tuple[SampleFilter, ...] = ()
     expect: Expectation = field(default_factory=Expectation)
     symbol_authority: str | None = None
     collapse_rule: str = "max_mean"
@@ -118,6 +120,7 @@ def _parse(raw: dict[str, Any], origin: str) -> CohortSpec:
         if isinstance(endpoint_raw, dict)
         else None
     )
+    filters = tuple(SampleFilter.from_dict(f) for f in (raw.get("sample_filters") or []))
     expect_raw = raw.get("expect") or {}
     expect = Expectation(
         n_samples=expect_raw.get("n_samples"),
@@ -131,6 +134,7 @@ def _parse(raw: dict[str, Any], origin: str) -> CohortSpec:
         accession=raw.get("accession"),
         platform=raw.get("platform"),
         endpoint=endpoint,
+        sample_filters=filters,
         expect=expect,
         symbol_authority=raw.get("symbol_authority"),
         collapse_rule=str(raw.get("collapse_rule", "max_mean")),

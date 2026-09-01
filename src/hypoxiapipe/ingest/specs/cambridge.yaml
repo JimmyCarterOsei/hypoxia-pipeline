@@ -7,21 +7,36 @@ collapse_rule: max_mean
 multi_probe_rule: drop
 log2_transform: null        # null = infer from the observed value range
 
+# Column names confirmed against the real series matrix on 2026-09-01 via
+# 'hypoxiapipe cohort inspect cambridge'. GEO characteristic keys are derived
+# from submitter free text, so they cannot be guessed - these are verbatim.
+#
+# The series holds 199 samples, not 199 primary tumours: benign comparison
+# tissue and castrate-resistant (CRPC) samples are deposited alongside. Both
+# must go before scoring. Benign tissue widens every gene's dynamic range,
+# which shifts the cohort-relative z-scores of the tumours; CRPC is a different
+# disease state whose recurrence endpoint does not mean the same thing.
+sample_filters:
+  - column: sample_type
+    keep: [Tumour]
+  - column: title
+    drop_contains: [CRPC]
+
 endpoint:
   name: BCR (5-year capped)
-  time_column: bcr_free_time
-  event_column: bcr_status
+  time_column: time_to_bcr_(months)
+  event_column: biochemical_relapse_(bcr)
   time_unit: months
-  event_values: ["1", "yes", "bcr"]
-  censor_values: ["0", "no", "ned"]
+  event_values: ["y", "yes", "1"]
+  censor_values: ["n", "no", "0"]
   cap_months: 60
 
 expect:
   min_genes: 10000
 
 notes: >
-  Cambridge prostate cohort (Ross-Adams 2015). The endpoint column names must be
-  confirmed against the parsed clinical table before this spec is trusted - GEO
-  characteristic keys are derived from free text and vary by submission. Run
-  'hypoxiapipe cohort inspect cambridge' to list the columns actually present,
-  then pin n_samples in expect once the build is verified.
+  Cambridge prostate cohort (Ross-Adams 2015). Sample count intentionally
+  unpinned until a verified build: pin expect.n_samples once you have one, so
+  a re-deposited series fails the build rather than shifting every number.
+  Samples with 'N/A' for relapse or time drop out at the analysis-set step and
+  are counted in the endpoint report.

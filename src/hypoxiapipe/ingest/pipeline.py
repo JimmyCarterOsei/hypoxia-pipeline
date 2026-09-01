@@ -35,6 +35,7 @@ from hypoxiapipe.harmonise.symbols import SymbolReport, harmonise_symbols
 from hypoxiapipe.ingest.cache import Cache
 from hypoxiapipe.ingest.cohort import Cohort
 from hypoxiapipe.ingest.endpoints import EndpointReport, derive_endpoint
+from hypoxiapipe.ingest.filters import apply_filters
 from hypoxiapipe.ingest.geo import load_geo
 from hypoxiapipe.ingest.spec import CohortSpec
 from hypoxiapipe.ingest.tcga_build import load_tcga
@@ -55,6 +56,7 @@ class BuildResult:
     endpoint: EndpointReport | None = None
     symbols: SymbolReport | None = None
     probes: ProbeMapReport | None = None
+    filters: list[dict[str, Any]] = field(default_factory=list)
     tcga: dict[str, Any] | None = None
     expectation_failures: list[str] = field(default_factory=list)
 
@@ -67,6 +69,7 @@ class BuildResult:
             "endpoint": self.endpoint.to_dict() if self.endpoint else None,
             "symbols": self.symbols.to_dict() if self.symbols else None,
             "probes": self.probes.to_dict() if self.probes else None,
+            "filters": self.filters,
             "tcga": self.tcga,
             "expectation_failures": self.expectation_failures,
         }
@@ -180,7 +183,15 @@ def build_cohort(
         )
         cohort = cohort.with_expression(logged, "log2_transform", pseudocount=1.0)
 
-    # -- 5. endpoint + analysis set ---------------------------------------
+    # -- 5. sample selection ----------------------------------------------
+    # Before the endpoint and before the analysis set is fixed, so the
+    # population every cohort-relative score is computed against is the
+    # intended one. Filtering afterwards would silently change every score.
+    filter_reports: list[dict[str, Any]] = []
+    if spec.sample_filters:
+        cohort, filter_reports = apply_filters(cohort, list(spec.sample_filters))
+
+    # -- 6. endpoint + analysis set ---------------------------------------
     endpoint_report: EndpointReport | None = None
     if spec.source == "tcga":
         # The TCGA loader derives the endpoint from the CDR or GDC clinical
@@ -200,7 +211,7 @@ def build_cohort(
         )
         cohort = cohort.restrict_to_analysis_set(TIME_COLUMN, EVENT_COLUMN)
 
-    # -- 6. QC ------------------------------------------------------------
+    # -- 7. QC ------------------------------------------------------------
     has_endpoint = spec.endpoint is not None or spec.source == "tcga"
     qc = run_qc(
         cohort,
@@ -209,7 +220,7 @@ def build_cohort(
         event_col=EVENT_COLUMN if has_endpoint else None,
     )
 
-    # -- 7. expectations --------------------------------------------------
+    # -- 8. expectations --------------------------------------------------
     n_events = endpoint_report.n_events if endpoint_report else None
     if spec.source == "tcga":
         n_events = int(cohort.clinical[EVENT_COLUMN].sum())
@@ -228,6 +239,7 @@ def build_cohort(
         endpoint=endpoint_report,
         symbols=symbol_report,
         probes=probe_report,
+        filters=filter_reports,
         tcga=tcga_report if spec.source == "tcga" else None,
         expectation_failures=failures,
     )

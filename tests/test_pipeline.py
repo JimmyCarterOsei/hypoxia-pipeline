@@ -272,3 +272,97 @@ def test_loading_a_non_cohort_directory_says_what_is_missing(tmp_path):
     (tmp_path / "empty").mkdir()
     with pytest.raises(IngestError, match="missing expression.parquet"):
         load_cohort(tmp_path / "empty")
+
+
+# --------------------------------------------------------------------------
+# sample filtering
+# --------------------------------------------------------------------------
+
+
+def _filter_cohort():
+    import pandas as pd  # noqa: PLC0415
+
+    from hypoxiapipe.ingest.cohort import Cohort, Provenance  # noqa: PLC0415
+
+    expr = pd.DataFrame([[1.0, 2.0, 3.0, 4.0]], index=["ALDOA"], columns=["S1", "S2", "S3", "S4"])
+    clinical = pd.DataFrame(
+        {
+            "sample_type": ["Tumour", "Benign", "Tumour", "Tumour"],
+            "title": ["primary A", "benign B", "CRPC sample C", "primary D"],
+        },
+        index=["S1", "S2", "S3", "S4"],
+    )
+    return Cohort(
+        name="Fixture", expr=expr, clinical=clinical, provenance=Provenance(source="local")
+    )
+
+
+def test_keep_and_drop_contains_select_the_intended_population():
+    from hypoxiapipe.ingest.filters import SampleFilter, apply_filters  # noqa: PLC0415
+
+    filtered, reports = apply_filters(
+        _filter_cohort(),
+        [
+            SampleFilter(column="sample_type", keep=("Tumour",)),
+            SampleFilter(column="title", drop_contains=("CRPC",)),
+        ],
+    )
+    assert list(filtered.expr.columns) == ["S1", "S4"]
+    assert reports[0]["n_dropped"] == 1  # the benign sample
+    assert reports[1]["n_dropped"] == 1  # the CRPC sample
+
+
+def test_filter_matching_is_case_insensitive():
+    from hypoxiapipe.ingest.filters import SampleFilter, apply_filters  # noqa: PLC0415
+
+    filtered, _ = apply_filters(
+        _filter_cohort(), [SampleFilter(column="sample_type", keep=("tumour",))]
+    )
+    assert filtered.n_samples == 3
+
+
+def test_a_filter_naming_an_unknown_column_says_how_to_find_the_real_one():
+    from hypoxiapipe.ingest.filters import SampleFilter, apply_filters  # noqa: PLC0415
+
+    with pytest.raises(IngestError, match="cohort inspect"):
+        apply_filters(_filter_cohort(), [SampleFilter(column="tissue", keep=("Tumour",))])
+
+
+def test_a_filter_that_removes_everything_is_an_error_not_an_empty_cohort():
+    from hypoxiapipe.ingest.filters import SampleFilter, apply_filters  # noqa: PLC0415
+
+    with pytest.raises(IngestError, match="removed every sample"):
+        apply_filters(_filter_cohort(), [SampleFilter(column="sample_type", keep=("Xenograft",))])
+
+
+def test_a_filter_must_set_exactly_one_mode():
+    from hypoxiapipe.ingest.filters import SampleFilter  # noqa: PLC0415
+
+    with pytest.raises(IngestError, match="exactly one"):
+        SampleFilter(column="sample_type")
+    with pytest.raises(IngestError, match="exactly one"):
+        SampleFilter(column="sample_type", keep=("A",), drop=("B",))
+
+
+def test_filters_are_recorded_in_provenance():
+    from hypoxiapipe.ingest.filters import SampleFilter, apply_filters  # noqa: PLC0415
+
+    filtered, _ = apply_filters(
+        _filter_cohort(), [SampleFilter(column="sample_type", keep=("Tumour",))]
+    )
+    reasons = [s.detail.get("reason") for s in filtered.provenance.steps]
+    assert any(r and "sample_type" in r for r in reasons)
+
+
+def test_the_geo_specs_filter_out_benign_and_crpc_samples():
+    """Both series deposit benign and castrate-resistant tissue alongside tumours."""
+    from hypoxiapipe.ingest.spec import load_bundled_cohort  # noqa: PLC0415
+
+    for name in ("cambridge", "stockholm"):
+        spec = load_bundled_cohort(name)
+        described = " ".join(f.describe() for f in spec.sample_filters)
+        assert "sample_type" in described, f"{name} does not exclude benign tissue"
+        assert "CRPC" in described, f"{name} does not exclude castrate-resistant samples"
+        assert spec.endpoint is not None
+        assert spec.endpoint.time_column == "time_to_bcr_(months)"
+        assert spec.endpoint.event_column == "biochemical_relapse_(bcr)"
