@@ -303,7 +303,7 @@ def test_missingness_is_reported_even_when_it_passes():
 
 
 def test_samples_missing_signature_genes_are_flagged():
-    """rowmean and z-scoring skip NaN, so such samples use fewer genes silently."""
+    """Scoring skips NaN, so such samples use fewer genes than their neighbours."""
     import numpy as np  # noqa: PLC0415
     import pandas as pd  # noqa: PLC0415
 

@@ -26,7 +26,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-cov", "hypothesis", "ruff", "mypy", "pre-commit"]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov",
+    "hypothesis",
+    # Linters are pinned, not floated. A new rule landing upstream turns the
+    # build red without a commit touching the code; adopting one should be a
+    # deliberate version bump.
+    "ruff==0.16.5",
+    "mypy==2.3.1",
+    "pre-commit",
+]
 
 [project.scripts]
 hypoxiapipe = "hypoxiapipe.cli:app"
