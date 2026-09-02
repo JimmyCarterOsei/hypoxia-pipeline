@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import stat
 import sys
 from pathlib import Path
@@ -87,10 +88,11 @@ def test_blank_override_falls_back_to_local_r(monkeypatch):
     assert argv is None or argv[0].endswith("Rscript")
 
 
-def test_a_configured_transport_counts_as_available(monkeypatch):
+def test_a_configured_transport_is_available_when_its_launcher_exists(monkeypatch):
+    # The transport is never executed to answer this - that would start a
+    # container on every import - but the launcher itself must be on PATH.
     monkeypatch.setenv(R_COMMAND_ENV, "docker run --rm -i example:latest")
-    # Taken at its word: probing would start a container on every import.
-    assert r_available()
+    assert r_available() == (shutil.which("docker") is not None)
 
 
 def test_no_r_anywhere_is_an_actionable_error(monkeypatch):
@@ -192,3 +194,19 @@ def test_dockerignore_keeps_data_and_git_out_of_the_context():
     ignored = (REPO_ROOT / ".dockerignore").read_text().split()
     for pattern in (".git", "*.parquet", "data"):
         assert pattern in ignored, f"{pattern} should be excluded from the build context"
+
+
+def test_a_transport_whose_launcher_is_absent_is_not_available(monkeypatch):
+    """A stale HYPOXIAPIPE_R_COMMAND should skip tests, not fail them.
+
+    Pointing the variable at an uninstalled launcher previously reported R as
+    available, so every survival test ran and failed inside a subprocess trace
+    rather than skipping with a clear reason.
+    """
+    monkeypatch.setenv(R_COMMAND_ENV, "/nonexistent/docker run --rm -i some/image")
+    assert not r_available()
+
+
+def test_a_transport_with_a_real_launcher_is_available(monkeypatch):
+    monkeypatch.setenv(R_COMMAND_ENV, f"{sys.executable} -c pass")
+    assert r_available()

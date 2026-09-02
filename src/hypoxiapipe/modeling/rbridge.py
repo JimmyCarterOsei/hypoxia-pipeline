@@ -76,10 +76,16 @@ def r_command() -> list[str] | None:
 
 def r_available() -> bool:
     """Return True when the R worker can be reached and has its dependencies."""
-    if os.environ.get(R_COMMAND_ENV, "").strip():
-        # A configured transport is taken at its word: probing it would mean
-        # starting a container on every import.
-        return True
+    override = os.environ.get(R_COMMAND_ENV, "").strip()
+    if override:
+        # The configured transport is not executed - that would start a
+        # container on every import - but its launcher must at least exist.
+        # Taking the variable entirely on trust meant a stale
+        # HYPOXIAPIPE_R_COMMAND pointing at an uninstalled docker reported R as
+        # available, so tests ran instead of skipping and failed six deep in a
+        # subprocess trace.
+        launcher = shlex.split(override)
+        return bool(launcher) and shutil.which(launcher[0]) is not None
     exe = rscript_path()
     if exe is None:
         return False
