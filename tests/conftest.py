@@ -10,6 +10,9 @@ from __future__ import annotations
 
 import gzip
 import socket
+import subprocess
+import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -113,3 +116,23 @@ def geo_spec():
             cap_months=60,
         ),
     )
+
+
+@pytest.fixture(scope="session")
+def workflow_fixtures():
+    """Return the generated workflow fixture directory, building it if absent.
+
+    The Nextflow test profile runs against generated fixtures that are too
+    bulky and too derived to commit. Requiring a manual `make_test_fixtures.py`
+    before `pytest` means a fresh clone fails on three tests for a reason that
+    has nothing to do with the code - so the suite generates them itself.
+    """
+    root = Path(__file__).resolve().parents[1]
+    directory = root / "tests/fixtures/workflow"
+    if not (directory / "demo_cohort.yaml").exists():
+        subprocess.run(  # noqa: S603 - fixed argv, no shell
+            [sys.executable, str(root / "tools/make_test_fixtures.py")],
+            check=True,
+            capture_output=True,
+        )
+    return directory

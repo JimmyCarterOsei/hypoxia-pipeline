@@ -99,6 +99,8 @@ jobs:
           sudo mv nextflow /usr/local/bin/
           nextflow -version
       - name: Generate workflow fixtures
+        # The test suite generates these itself when missing; the Nextflow run
+        # needs them without pytest having run first.
         run: python tools/make_test_fixtures.py
       - name: Run the workflow
         # -profile test uses the locally installed package rather than the

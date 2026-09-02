@@ -111,27 +111,27 @@ def test_test_profile_is_offline_and_needs_no_containers():
     assert "docker.enabled   = false" in profile.replace("=false", "= false")
 
 
-def test_test_profile_fixtures_exist():
-    spec = FIXTURES / "demo_cohort.yaml"
-    assert spec.exists(), "run tools/make_test_fixtures.py to generate the workflow fixtures"
-    assert (FIXTURES / "cache").is_dir()
+def test_test_profile_fixtures_exist(workflow_fixtures):
+    spec = workflow_fixtures / "demo_cohort.yaml"
+    assert spec.exists()
+    assert (workflow_fixtures / "cache").is_dir()
 
     parsed = yaml.safe_load(spec.read_text())
     assert parsed["source"] == "geo"
     assert parsed["expect"]["n_samples"] > 0
 
 
-def test_test_profile_fixture_cache_has_what_the_spec_asks_for():
-    spec = yaml.safe_load((FIXTURES / "demo_cohort.yaml").read_text())
-    cached = {p.name for p in (FIXTURES / "cache").rglob("*") if p.is_file()}
+def test_test_profile_fixture_cache_has_what_the_spec_asks_for(workflow_fixtures):
+    spec = yaml.safe_load((workflow_fixtures / "demo_cohort.yaml").read_text())
+    cached = {p.name for p in (workflow_fixtures / "cache").rglob("*") if p.is_file()}
     assert any(spec["accession"] in name for name in cached), "series matrix not cached"
     assert any(spec["platform"] in name for name in cached), "platform annotation not cached"
 
 
-def test_the_fixture_spec_pins_its_expectations():
+def test_the_fixture_spec_pins_its_expectations(workflow_fixtures):
     # The fixture is generated, so its sample count is known exactly; pinning
     # it means a change to the generator fails the smoke run loudly.
-    spec = yaml.safe_load((FIXTURES / "demo_cohort.yaml").read_text())
+    spec = yaml.safe_load((workflow_fixtures / "demo_cohort.yaml").read_text())
     assert spec["expect"]["n_samples"] == 140
 
 
