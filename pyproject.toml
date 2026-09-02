@@ -35,6 +35,12 @@ dev = [
     # deliberate version bump.
     "ruff==0.16.5",
     "mypy==2.3.1",
+    # Type stubs are a declared dependency of the type check, not something a
+    # developer machine happens to have. Without them mypy reports pandas and
+    # yaml as untyped and every annotated boundary degrades to Any - which
+    # passed locally and failed in CI.
+    "pandas-stubs==3.0.5.260730",
+    "types-PyYAML==6.0.12.20260815",
     "pre-commit",
 ]
 
