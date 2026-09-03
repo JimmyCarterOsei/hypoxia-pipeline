@@ -23,6 +23,7 @@ the old one, so the trail shows what was believed and when.
 | [0010](0010-split-python-and-r-images.md) | Python and R ship as separate images | Accepted |
 | [0011](0011-duckdb-deferred.md) | The DuckDB layer is deferred until something queries it | Accepted |
 | [0012](0012-implausible-counts-are-checked.md) | Counts are checked for plausibility, not only for consistency | Accepted |
+| [0013](0013-single-sample-scoring-is-refused.md) | Single-sample scoring is refused, not approximated | Accepted |
 
 ## Format
 

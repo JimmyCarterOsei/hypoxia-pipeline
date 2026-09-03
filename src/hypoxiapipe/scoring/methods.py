@@ -34,7 +34,10 @@ from hypoxiapipe.signatures.registry import Signature
 
 DEFAULT_MIN_GENES = 3
 
-_METHODS = ("rowmean", "median_z", "weighted")
+#: Every scoring method this package implements. All are cohort-relative: the
+#: score of a sample depends on the other samples it is scored alongside.
+METHODS = ("rowmean", "median_z", "weighted")
+_METHODS = METHODS
 
 
 @dataclass(frozen=True)

@@ -17,10 +17,14 @@ sig_app = typer.Typer(no_args_is_help=True, help="Signature registry commands.")
 cohort_app = typer.Typer(no_args_is_help=True, help="Cohort ingest, QC and harmonisation.")
 manifest_app = typer.Typer(no_args_is_help=True, help="Run manifests and provenance.")
 model_app = typer.Typer(no_args_is_help=True, help="Survival modelling and validation.")
+reference_app = typer.Typer(
+    no_args_is_help=True, help="Scoring references for single-sample scoring."
+)
 app.add_typer(sig_app, name="sig")
 app.add_typer(cohort_app, name="cohort")
 app.add_typer(manifest_app, name="manifest")
 app.add_typer(model_app, name="model")
+app.add_typer(reference_app, name="reference")
 
 
 @sig_app.command("list")
@@ -370,6 +374,65 @@ def model_cv(
         manifest.close(command=f"model cv {directory}")
         manifest.write(out)
         typer.echo(f"\nwritten to {out} (run {manifest.run_id})")
+
+
+@reference_app.command("create")
+def reference_create(
+    directory: Path = typer.Argument(..., help="Cohort directory from 'cohort build'."),
+    signature: str = typer.Option(..., "--signature", "-s", help="Signature to freeze."),
+    reference_id: str | None = typer.Option(None, help="Defaults to <cohort>-<signature>."),
+    out: Path | None = typer.Option(None, help="Reference directory."),
+) -> None:
+    """Freeze a cohort's per-gene statistics so single samples can be scored.
+
+    Cohort-relative scoring has no meaning for one sample. Freezing a named
+    population gives a fixed distribution to score against, and the reference
+    records which cohort it came from so any score remains attributable.
+    """
+    from hypoxiapipe.api.references import build_reference, save_reference
+    from hypoxiapipe.ingest.store import load_cohort
+
+    try:
+        cohort = load_cohort(directory)
+        spec_path = Path(signature)
+        sig = (
+            registry.load_spec(spec_path)
+            if spec_path.exists()
+            else registry.load_bundled(signature)
+        )
+        reference = build_reference(
+            reference_id or f"{cohort.name.lower()}-{sig.name}",
+            cohort.expr,
+            sig,
+            cohort_name=cohort.name,
+            population_hash=cohort.population_hash,
+            method=sig.scoring,
+        )
+        path = save_reference(reference, out)
+    except HypoxiapipeError as exc:
+        typer.echo(f"{type(exc).__name__}: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(json.dumps(reference.describe(), indent=2))
+    typer.echo(f"\nwritten to {path}", err=True)
+
+
+@reference_app.command("list")
+def reference_list(
+    directory: Path | None = typer.Option(None, help="Reference directory."),
+) -> None:
+    """List registered scoring references."""
+    from hypoxiapipe.api.references import list_references, reference_dir
+
+    refs = list_references(directory)
+    if not refs:
+        typer.echo(f"no references in {directory or reference_dir()}", err=True)
+        return
+    for ref in refs:
+        typer.echo(
+            f"  {ref.reference_id:<28} {ref.signature:<10} n={ref.n_train:<5} "
+            f"genes={len(ref.genes):<4} {ref.cohort}"
+        )
 
 
 @manifest_app.command("show")

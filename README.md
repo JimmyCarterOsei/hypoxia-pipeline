@@ -202,6 +202,33 @@ which is a data change rather than a regression, and a test that fails on a legi
 upstream release trains people to ignore it. `population_hash` is asserted, because it
 covers the exact sample set every score is relative to.
 
+## Scoring service
+
+```bash
+pip install -e ".[api]"
+hypoxiapipe reference create out/prad -s smith20      # freeze a named population
+HYPOXIAPIPE_REFERENCES=references uvicorn hypoxiapipe.api.app:app
+```
+
+Two endpoints, and the difference between them is the point:
+
+| endpoint | scores relative to | one sample? |
+|---|---|---|
+| `POST /score/batch` | the submitted cohort | **422** |
+| `POST /score/reference` | a registered reference cohort | yes |
+
+Every scoring method here is cohort-relative — `rowmean` and `weighted` z-score
+each gene across the samples supplied, `median_z` standardises across them — so a
+score is a property of a patient *and the batch they arrived in*. With one sample
+there is no distribution, and returning a well-formed number for it would be the
+most dangerous thing in this repository: a result that looks right, gets stored and
+plotted, and is meaningless.
+
+So `/score/batch` refuses, explains why, and points at `/score/reference`, which
+scores against frozen statistics from a named cohort. Responses carry the reference
+id, its scaler checksum, and the population hash of the cohort it came from — see
+[ADR 0013](docs/adr/0013-single-sample-scoring-is-refused.md).
+
 ## Run manifests
 
 Every `cohort build` writes a `manifest.json` recording the run: the accession and the
@@ -258,7 +285,8 @@ cohort store);
 provenance (content hashing, run manifests, verification); modelling (frozen preprocessing,
 coxnet, random survival forest, nested CV, R survival bridge); containers and CI
 (split Python/R images, GHCR publishing, pluggable R transport); Nextflow DSL2
-orchestration with an offline test profile that runs the full DAG in ~20s.
+orchestration with an offline test profile that runs the full DAG in ~20s; a
+FastAPI scoring service that refuses scientifically invalid single-sample requests.
 287 tests, all offline, plus golden-file regression tests against verified
 builds of all three cohorts (TCGA-PRAD on GDC release 46.0, Cambridge and
 Stockholm from GEO). Decisions recorded in [docs/adr](docs/adr/).

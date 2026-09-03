@@ -169,7 +169,9 @@ def test_run_provenance_is_captured():
         assert "overwrite = true" in config
 
 
-def test_images_are_declared_as_parameters():
+def test_images_are_pinned_by_digest_not_tag():
+    """A tag is reproducible only until someone pushes over it."""
     config = CONFIG.read_text()
-    assert "python_image" in config
-    assert "r_image" in config
+    for name in ("python_image", "r_image"):
+        line = next(ln for ln in config.splitlines() if ln.strip().startswith(name))
+        assert "@sha256:" in line, f"{name} is not pinned by digest: {line.strip()}"

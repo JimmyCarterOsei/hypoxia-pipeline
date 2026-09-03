@@ -23,7 +23,7 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y -q r-base-core r-cran-jsonlite
           Rscript -e 'quit(status = as.integer(!requireNamespace("survival", quietly = TRUE)))'
-      - run: pip install -e ".[dev]"
+      - run: pip install -e ".[dev,api]"
       - name: Lint
         run: ruff check src tests
       - name: Format check
@@ -86,7 +86,7 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q r-base-core r-cran-jsonlite
-      - run: pip install -e ".[dev]"
+      - run: pip install -e ".[dev,api]"
       - name: Install Nextflow
         # Pinned, not latest. An unpinned installer silently upgraded to 26.x,
         # whose rewritten parser rejected syntax that 24.x accepted - the build
