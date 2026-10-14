@@ -61,6 +61,26 @@ jobs:
           docker run --rm -d --name hypoxiapipe-api-smoke \
             -p 127.0.0.1:8000:8000 'hypoxiapipe-api:${{ github.sha }}'
           trap 'docker logs hypoxiapipe-api-smoke || true; docker stop hypoxiapipe-api-smoke || true' EXIT
+          python3 - <<'PY'
+          import sys
+          import time
+          import urllib.request
+
+          url = "http://127.0.0.1:8000/ready"
+          deadline = time.monotonic() + 60
+          while time.monotonic() < deadline:
+              try:
+                  with urllib.request.urlopen(url, timeout=2) as response:
+                      if response.status == 200:
+                          print("API readiness: ready")
+                          break
+                      print(f"API readiness: HTTP {response.status}", file=sys.stderr)
+              except OSError as exc:
+                  print(f"API readiness: {exc}", file=sys.stderr)
+              time.sleep(min(1, max(0, deadline - time.monotonic())))
+          else:
+              raise SystemExit("API readiness did not succeed within 60 seconds")
+          PY
           python3 scripts/demo_model_api.py --known-fixture --url http://127.0.0.1:8000
           docker image inspect 'hypoxiapipe-api:${{ github.sha }}' \
             --format 'Image ID: {{.Id}}; labels: {{json .Config.Labels}}' >> "$GITHUB_STEP_SUMMARY"
