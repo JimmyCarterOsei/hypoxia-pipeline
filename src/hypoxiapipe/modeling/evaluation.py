@@ -55,23 +55,23 @@ def paired_bootstrap(
     for (repeat, fold), group in reference.groupby(["repeat", "fold"], sort=True):
         time = group.time.to_numpy()
         event = group.event.to_numpy(dtype=bool)
-        # i had an event; j remains at risk after i, or is censored at i's time.
+        # The event patient is compared with someone still at risk or censored at that time.
         comparable = event[:, None] & (
             (time[:, None] < time[None, :]) | ((time[:, None] == time[None, :]) & ~event[None, :])
         )
-        i, j = np.nonzero(comparable)
-        if not len(i):
+        event_idx, comparator_idx = np.nonzero(comparable)
+        if not len(event_idx):
             raise ModelingError("outer fold has no comparable pairs")
         concordance = []
         for name in names:
             risk = tables[name].loc[group.index, "risk"].to_numpy()
-            difference = risk[i] - risk[j]
+            difference = risk[event_idx] - risk[comparator_idx]
             concordance.append(
                 (difference > 1e-8).astype(float) + 0.5 * (np.abs(difference) <= 1e-8)
             )
         credit = np.array(concordance)
         indices = np.array([pos[p] for p in group.patient])
-        pair_weights = weights[:, indices[i]] * weights[:, indices[j]]
+        pair_weights = weights[:, indices[event_idx]] * weights[:, indices[comparator_idx]]
         den = pair_weights.sum(axis=1)
         boot = np.full((draws, len(names)), np.nan)
         valid = den > 0
@@ -79,14 +79,14 @@ def paired_bootstrap(
         values = credit.mean(axis=1)
         fold_values.append(values)
         fold_boots.append(boot)
-        denominators.append(len(i))
+        denominators.append(len(event_idx))
         rows.extend(
             {
                 "model": name,
                 "repeat": repeat,
                 "fold": fold,
                 "c_index": float(values[k]),
-                "comparable_pairs": len(i),
+                "comparable_pairs": len(event_idx),
             }
             for k, name in enumerate(names)
         )
@@ -113,12 +113,12 @@ def paired_bootstrap(
                 "bootstrap_valid": len(boots),
             }
         )
-        for j in range(k):
-            low, high = np.quantile(boots[:, k] - boots[:, j], [0.025, 0.975])
-            difference = values[:, k] - values[:, j]
+        for other_idx in range(k):
+            low, high = np.quantile(boots[:, k] - boots[:, other_idx], [0.025, 0.975])
+            difference = values[:, k] - values[:, other_idx]
             pairs.append(
                 {
-                    "comparison": f"{name} minus {names[j]}",
+                    "comparison": f"{name} minus {names[other_idx]}",
                     "mean_difference": difference.mean(),
                     "sd_difference": difference.std(ddof=1),
                     "median_difference": np.median(difference),

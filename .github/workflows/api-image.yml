@@ -30,9 +30,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BASE_REF=python:3.12-slim-bookworm
-          BASE_DIGEST="$(docker buildx imagetools inspect "$BASE_REF" | awk '$1 == "Digest:" {print $2; exit}')"
+          BASE_REF="python:3.12-slim-bookworm"
+          docker pull "$BASE_REF"
+          BASE_REPODIGEST="$(docker image inspect "$BASE_REF" --format '{{index .RepoDigests 0}}')"
+          BASE_DIGEST="${BASE_REPODIGEST##*@}"
           test -n "$BASE_DIGEST"
+          case "$BASE_DIGEST" in sha256:*) ;; *) exit 1 ;; esac
           echo "reference=$BASE_REF@$BASE_DIGEST" >> "$GITHUB_OUTPUT"
           echo "Python base: $BASE_REF@$BASE_DIGEST" >> "$GITHUB_STEP_SUMMARY"
 

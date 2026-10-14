@@ -2,6 +2,7 @@
 
 import io
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -143,7 +144,8 @@ def test_undeclared_expression_domain_fails(matrix, tmp_path):
         app, ["model", "predict", "--model", str(BUNDLE), "--expression", str(path)]
     )
     assert result.exit_code != 0
-    assert "--expression-type" in result.output
+    plain_output = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", result.output)
+    assert "--expression-type" in plain_output
 
 
 def test_corrupted_bundle_fails(matrix, tmp_path):
