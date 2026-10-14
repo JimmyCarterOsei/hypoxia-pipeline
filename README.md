@@ -1,6 +1,95 @@
 # hypoxia-pipeline
 
-Reproducible transcriptomic signature scoring with content-addressed signature provenance.
+`hypoxiapipe` is a reproducible prostate-cancer transcriptomics and survival-ML
+pipeline built around the fixed Smith20 signature. It provides research-use CLI,
+FastAPI, and Docker inference from a frozen biochemical-recurrence Cox model,
+with provenance and checksum verification. **It is not a clinical device. The
+frozen STAR-native predictor has no independent STAR-compatible external
+validation.**
+
+## What it does
+
+1. Ingests prostate tumour transcriptomic cohorts with recorded source checksums.
+2. Scores the fixed Smith20 biological signature.
+3. Constructs the separate longitudinal TCGA-PRAD biochemical-recurrence endpoint.
+4. Evaluates survival models with training-only preprocessing and nested validation.
+5. Loads a frozen STAR-Smith20-Cox v1 research model for individual inference.
+6. Serves that model through the CLI and FastAPI with manifest verification.
+
+`/score/*` is research signature scoring; `/predict/recurrence` is inference from
+the frozen trained model. Their inputs and interpretations differ.
+
+```mermaid
+flowchart TD
+    A[GDC-compatible STAR TPM] --> B[log2 TPM + 1 and HGNC harmonisation]
+    B --> C[Strict expression-domain validation]
+    C --> D[Frozen 483-patient Smith20 scaler]
+    D --> E[Fixed 20-gene Smith20 composite]
+    E --> F[Frozen Cox beta]
+    F --> G[CLI or FastAPI]
+    G --> H[Relative hazard, percentile and provenance]
+```
+
+## Quickstart
+
+```bash
+pip install -e ".[api]"
+hypoxiapipe model inspect --model models/prad-bcr-star-smith20-cox-v1
+hypoxiapipe model predict \
+  --model models/prad-bcr-star-smith20-cox-v1 \
+  --expression docs/examples/recurrence-expression.tsv \
+  --expression-type gdc_star_tpm_log2p1_hgnc
+
+HYPOXIAPIPE_MODELS=models \
+  uvicorn hypoxiapipe.api.app:app --host 0.0.0.0 --port 8000
+```
+
+In another shell, request `GET /health`, `GET /models`, then submit the
+[synthetic JSON example](docs/examples/recurrence-prediction.json) to
+`POST /predict/recurrence`:
+
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/models
+curl -X POST http://localhost:8000/predict/recurrence \
+  -H 'Content-Type: application/json' \
+  --data @docs/examples/recurrence-prediction.json
+```
+
+Container quickstart (when Docker is available):
+
+```bash
+docker build -f docker/Dockerfile.api -t hypoxiapipe-api:0.1.0 .
+docker run --rm -p 8000:8000 hypoxiapipe-api:0.1.0
+```
+
+The two example inputs are **synthetic schema demonstrations**. Twenty arbitrary
+numbers are not a valid biological assay: real inputs must already meet the
+`gdc_star_tpm_log2p1_hgnc` contract. See the
+[model card](docs/models/prad-bcr-star-smith20-cox-v1.md) for evidence and limits.
+
+## Model evidence and limits
+
+| Evidence | Population or evaluation | Result |
+| --- | --- | --- |
+| Development | TCGA-PRAD GDC STAR | 483 patients; 97 BCR events after 60-month censoring |
+| Internal held-out evaluation | Repeated nested CV, fixed Smith20 Cox (M0) | Mean Harrell C = 0.682540 |
+| External Smith20 association | MSKCC | HR = 1.937 |
+| External Smith20 association | Cambridge | HR = 1.798 |
+| External Smith20 association | Stockholm | HR = 1.734 |
+
+These external cohorts validate the cohort-relative Smith20 prognostic
+association, not the frozen STAR-native predictor. The model card separates
+the internal predictive estimate from the fitted development-cohort statistics
+and documents proportional-hazards and input-domain limitations. No absolute
+recurrence probabilities, clinical risk categories, or treatment advice are provided.
+
+## Tests and CI
+
+Run `ruff check src tests`, `ruff format --check src tests`, `mypy --strict src`,
+and `pytest -q`. GitHub Actions also verifies the frozen bundle, builds the API
+image, and runs the known-prediction smoke test. See the
+[v0.1.0 release notes](docs/releases/v0.1.0.md) for the release scope and limits.
 
 ## Why
 
@@ -40,6 +129,42 @@ hypoxiapipe model validate out/cambridge -s smith20      # per-SD Cox HRs, fitte
 hypoxiapipe model validate out/cambridge -s smith20 --action quartile
 hypoxiapipe model cv out/cambridge --estimator coxnet -o out/cv   # nested CV
 ```
+
+### Frozen STAR Smith20 Cox research inference
+
+The `prad-bcr-star-smith20-cox-v1` bundle accepts **prostate tumour expression on the
+GDC-compatible STAR TPM scale after log2(TPM + 1) and hypoxiapipe HGNC-symbol
+harmonisation**. The required expression type is `gdc_star_tpm_log2p1_hgnc`; the CLI
+does not infer it from numbers. DESeq2 VST, RSEM, microarray, FPKM, raw counts and
+arbitrary normalized matrices are outside this input contract.
+
+Supply a TSV with gene symbols in its first column, genes as rows, and one or more
+samples as columns. All 20 Smith20 genes are required; extra genes are ignored. For
+example, a file starts with `gene<TAB>sample_1` followed by gene/value rows:
+
+```bash
+hypoxiapipe model inspect --model models/prad-bcr-star-smith20-cox-v1
+hypoxiapipe model predict \
+  --model models/prad-bcr-star-smith20-cox-v1 \
+  --expression example.tsv \
+  --expression-type gdc_star_tpm_log2p1_hgnc
+hypoxiapipe model predict \
+  --model models/prad-bcr-star-smith20-cox-v1 \
+  --expression example.tsv \
+  --expression-type gdc_star_tpm_log2p1_hgnc \
+  --format tsv --output predictions.tsv --metadata-output predictions-metadata.json
+```
+
+`--format json` emits a predictions array and one shared provenance/interpretation
+object. `--format tsv` emits the seven prediction columns; the optional metadata file
+holds provenance separately. The default is a readable table. A research-use warning
+goes to stderr so it does not corrupt machine-readable stdout.
+
+The Smith20 score uses frozen TCGA training means and SDs. The linear predictor is
+Cox beta times that standardized score; relative hazard is its exponential relative
+to model score zero. Percentile is the score's position in the frozen TCGA training
+distribution. **None is an absolute recurrence probability.** This research-use
+predictor has no independent STAR-compatible external validation.
 
 `cohort build` runs the whole ingest path: fetch (cached), map probes to symbols via the
 platform annotation, harmonise symbols onto the pinned HGNC release, infer or apply the
@@ -210,7 +335,7 @@ hypoxiapipe reference create out/prad -s smith20      # freeze a named populatio
 HYPOXIAPIPE_REFERENCES=references uvicorn hypoxiapipe.api.app:app
 ```
 
-Two endpoints, and the difference between them is the point:
+Two scoring endpoints, and the difference between them is the point:
 
 | endpoint | scores relative to | one sample? |
 |---|---|---|
@@ -228,6 +353,46 @@ So `/score/batch` refuses, explains why, and points at `/score/reference`, which
 scores against frozen statistics from a named cohort. Responses carry the reference
 id, its scaler checksum, and the population hash of the cohort it came from — see
 [ADR 0013](docs/adr/0013-single-sample-scoring-is-refused.md).
+
+## Frozen recurrence-model API
+
+Configure a directory of approved model bundles explicitly. At startup, every
+immediate child bundle is checked against its manifest; a corrupt configured
+bundle stops startup with a path-free integrity error. With no
+`HYPOXIAPIPE_MODELS` setting, or an empty directory, signature scoring remains
+available and `/models` is empty. `/health` reports liveness and model count;
+`/ready` reports readiness without running inference. Clients select a
+registered `model_id` and cannot submit a filesystem path or artifact URL.
+
+```bash
+HYPOXIAPIPE_MODELS=models \
+  uvicorn hypoxiapipe.api.app:app --reload
+
+curl http://localhost:8000/health
+curl http://localhost:8000/ready
+curl http://localhost:8000/models
+curl http://localhost:8000/models/prad-bcr-star-smith20-cox-v1
+curl -X POST http://localhost:8000/predict/recurrence \
+  -H 'Content-Type: application/json' \
+  --data @docs/examples/recurrence-prediction.json
+```
+
+The example JSON is a synthetic one-patient request with all 20 required genes.
+Show the relative hazard, training percentile and checksums, then submit that
+same patient alongside others: their individual prediction fields are identical.
+`/docs` provides the full request and response schemas and a valid example.
+For a short live walkthrough after starting the API, run
+`python3 scripts/demo_model_api.py`; add `--known-fixture` for the committed
+TCGA numerical regression used in CI.
+
+`/score/*` performs signature scoring for research analysis. In particular,
+`/score/batch` is cohort-relative and refuses one sample. In contrast,
+`/predict/recurrence` applies the frozen **trained** STAR-Smith20-Cox v1 model
+to one or many patients using its stored TCGA training statistics. It requires
+`expression_type=gdc_star_tpm_log2p1_hgnc`, genes as rows, samples as columns,
+and all 20 Smith20 genes. The response is research-use only: relative hazard
+and percentile are not absolute recurrence probabilities. The frozen predictor
+has not yet received independent STAR-compatible external validation.
 
 ## Run manifests
 

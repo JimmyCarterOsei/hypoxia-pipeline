@@ -29,7 +29,7 @@ import pandas as pd
 
 from hypoxiapipe.errors import HypoxiapipeError
 
-ACTIONS = ("cox_persd", "cox_multivariable", "quartile")
+ACTIONS = ("cox_persd", "cox_multivariable", "quartile", "cox_frozen")
 DEFAULT_TIMEOUT = 300
 
 #: Overrides the command used to reach the R worker. The contract is one JSON
@@ -266,3 +266,25 @@ def cox(
 def results_frame(results: list[SurvivalResult]) -> pd.DataFrame:
     """Return survival results as a tidy DataFrame for reporting."""
     return pd.DataFrame([r.to_dict() for r in results])
+
+
+class FrozenCox:
+    """One fixed, already-standardised covariate fitted by R survival, without fallback."""
+
+    def fit(self, features: np.ndarray, structured: Any) -> FrozenCox:
+        """Fit the coefficient without restandardising the supplied training score."""
+        if features.ndim != 2 or features.shape[1] != 1:
+            raise RBridgeError("frozen Cox requires exactly one covariate")
+        (result,) = cox(
+            structured["time"],
+            structured["event"],
+            {"fixed_smith20": features[:, 0]},
+            action="cox_frozen",
+        )
+        self.coef_ = np.array([float(result.detail["coefficient"])])
+        self.detail = result.to_dict()
+        return self
+
+    def predict(self, features: np.ndarray) -> np.ndarray:
+        """Apply the fixed R coefficient; this is a risk score, not survival probability."""
+        return np.asarray(features @ self.coef_, dtype=float)

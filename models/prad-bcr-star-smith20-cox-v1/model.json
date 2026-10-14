@@ -1,0 +1,22 @@
+{
+  "absolute_recurrence_probability_supported": false,
+  "censoring_horizon_months": 60,
+  "coefficient": 0.5806182816932,
+  "created_utc": "2026-10-14T16:22:39.357883+00:00",
+  "endpoint": "longitudinal TCGA-PRAD biochemical recurrence",
+  "estimator": "fixed_smith20_cox",
+  "features_checksum": "sha256:67a47c6ee1993d5b00f9776bd7d12f45accd6245e7498b5e3f7c619b0be79374",
+  "model_id": "prad-bcr-star-smith20-cox-v1",
+  "outputs": [
+    "smith20_score",
+    "linear_predictor",
+    "relative_hazard",
+    "training_percentile"
+  ],
+  "scaler_checksum": "sha256:fd178d541fdaa762a64248edf2c9025b2cbf22e17734a094c628ebef9d0aafcc",
+  "status": "research_use_only",
+  "tie_method": "efron",
+  "training_events": 97,
+  "training_n": 483,
+  "version": "1.0.0"
+}

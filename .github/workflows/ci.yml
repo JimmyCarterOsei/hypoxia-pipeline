@@ -25,11 +25,15 @@ jobs:
           Rscript -e 'quit(status = as.integer(!requireNamespace("survival", quietly = TRUE)))'
       - run: pip install -e ".[dev,api]"
       - name: Lint
-        run: ruff check src tests
+        run: ruff check src tests scripts/demo_model_api.py
       - name: Format check
-        run: ruff format --check src tests
+        run: ruff format --check src tests scripts/demo_model_api.py
       - name: Type check
-        run: mypy
+        run: mypy --strict src
+      - name: Verify frozen research model bundle
+        run: |
+          hypoxiapipe model inspect --model models/prad-bcr-star-smith20-cox-v1 --format json
+          pytest -q tests/test_model_bundle.py tests/test_model_inference_cli.py tests/test_model_api.py
       - name: Verify all bundled signature checksums
         run: |
           for f in src/hypoxiapipe/signatures/specs/*.yaml; do

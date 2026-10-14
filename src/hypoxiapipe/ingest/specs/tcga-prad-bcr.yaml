@@ -1,0 +1,40 @@
+name: TCGA-PRAD longitudinal biochemical recurrence
+source: tcga
+accession: TCGA-PRAD
+workflow: STAR - Counts
+star_value_column: tpm_unstranded
+symbol_authority: "2024-07-01"
+collapse_rule: max_mean
+primary_tumours_only: true
+duplicate_aliquot_rule: first
+log2_transform: true
+
+# Saved Clinical Supplement / BCR XML, containing enrollment and all follow-ups.
+# Supply your own copy; data is not redistributed. This directory can be moved
+# or flattened without changing the aggregate checksum (see ADR 0014).
+clinical_source: tcga_bcr
+clinical_path: data/tcga-prad-bcr-xml
+clinical_checksum: sha256:f9bfa3ab554253c0b7a7cb00574f74d2bf1411decab2104ac1fb47bbd3329a8c
+
+# Already derived by tcga_bcr; the generic days conversion is NOT applied.
+endpoint:
+  name: Longitudinal biochemical recurrence (60-month capped)
+  time_column: time_months
+  event_column: event
+  time_unit: months
+  cap_months: 60
+
+# Verified full cached STAR build on 2026-09-25: 554 files, 497 expression
+# patients, 483 matched, 101 uncapped / 97 capped events. Manifest checksum
+# and population hash are in tests/golden/tcga-prad-bcr.json.
+expect:
+  n_samples: 483
+  min_genes: 15000
+
+notes: >
+  Verified clinical snapshot: 500 source patients, 485 usable endpoints,
+  102 uncapped events and 97 capped events. The expression source is the
+  normal cached GDC STAR pipeline, not the historically restricted RDS.
+  n_samples is pinned to the verified STAR intersection, not the old RDS.
+  The audited saved expression RDS reproduces 431/92 only at its exact
+  checksum; neither that count nor historical 433/51 defines this cohort.

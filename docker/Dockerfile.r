@@ -27,6 +27,7 @@ RUN install2.r --error --skipinstalled survival jsonlite \
  && rm -rf /tmp/downloaded_packages
 
 COPY src/hypoxiapipe/modeling/r/survival_worker.R /opt/hypoxiapipe/survival_worker.R
+COPY LICENSE /opt/hypoxiapipe/LICENSE
 
 RUN useradd --create-home --uid 1000 worker \
  && chown -R worker:worker /opt/hypoxiapipe

@@ -1,0 +1,6 @@
+{
+  "python_package": "0.1.0",
+  "r_version": "4.5.3",
+  "representation": "checksum-verified JSON only; no pickle/joblib",
+  "survival_version": "3.8.11"
+}

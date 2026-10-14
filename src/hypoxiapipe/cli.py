@@ -490,5 +490,118 @@ def manifest_verify(
         raise typer.Exit(code=1)
 
 
+@model_app.command("develop-molecular")
+def model_develop_molecular(
+    cohort_directory: Path = typer.Argument(
+        ..., help="Verified Phase 9B STAR/BCR cohort directory."
+    ),
+    output_directory: Path = typer.Argument(..., help="Empty directory for nested-CV diagnostics."),
+) -> None:
+    """Evaluate the locked molecular development protocol without saving model bundles."""
+    from hypoxiapipe.modeling.development import run_development
+
+    try:
+        run_development(cohort_directory, output_directory)
+    except HypoxiapipeError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+
+
+@model_app.command("freeze-smith20")
+def model_freeze_smith20(
+    cohort_directory: Path = typer.Argument(..., help="Pinned Phase 9B STAR/BCR cohort."),
+    cv_comparison: Path = typer.Argument(..., help="Phase 9C.2 comparison.csv."),
+    external_reproduction: Path = typer.Argument(..., help="Phase 9D.1 Smith20 results CSV."),
+    output_directory: Path = typer.Argument(..., help="Empty directory for the JSON bundle."),
+) -> None:
+    """Fit and freeze the research-use STAR Smith20 Cox v1 candidate."""
+    from hypoxiapipe.modeling.bundle import create_model_bundle
+
+    try:
+        result = create_model_bundle(
+            cohort_directory, cv_comparison, external_reproduction, output_directory
+        )
+    except HypoxiapipeError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"{result.model_id} {result.model_version}: {result.path}")
+
+
+@model_app.command("predict")
+def model_predict(
+    model: Path = typer.Option(..., "--model", help="Frozen JSON model bundle directory."),
+    expression: Path = typer.Option(..., "--expression", help="Genes x samples TSV or CSV."),
+    expression_type: str = typer.Option(
+        ..., "--expression-type", help="Required: gdc_star_tpm_log2p1_hgnc."
+    ),
+    output_format: str = typer.Option("table", "--format", help="table, json or tsv."),
+    output: Path | None = typer.Option(None, "--output", help="Write predictions to this file."),
+    metadata_output: Path | None = typer.Option(
+        None, "--metadata-output", help="Write batch provenance as JSON."
+    ),
+) -> None:
+    """Score one or more samples with the frozen research-use Smith20 Cox model."""
+    from hypoxiapipe.modeling.bundle import BundleError, load_model_bundle
+    from hypoxiapipe.modeling.inference_cli import (
+        prediction_metadata,
+        read_expression_matrix,
+        render_predictions,
+    )
+
+    try:
+        if output_format not in {"table", "json", "tsv"}:
+            raise BundleError("format must be table, json or tsv")
+        destinations = [path.resolve() for path in (output, metadata_output) if path is not None]
+        if len(destinations) != len(set(destinations)):
+            raise BundleError("prediction and metadata output paths must be distinct")
+        if any(
+            path == expression.resolve() or path.is_relative_to(model.resolve())
+            for path in destinations
+        ):
+            raise BundleError(
+                "output paths cannot overwrite input expression or model bundle files"
+            )
+        bundle = load_model_bundle(model)
+        matrix = read_expression_matrix(expression, tuple(bundle.features["genes"]))
+        result = bundle.predict(matrix, expression_type=expression_type)
+        metadata = prediction_metadata(bundle, result, expression_type)
+        rendered = render_predictions(result, metadata, output_format)
+        if output:
+            output.write_text(rendered)
+        if metadata_output:
+            metadata_output.write_text(json.dumps(metadata, indent=2) + "\n")
+    except (HypoxiapipeError, OSError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    if output:
+        typer.echo(f"written {output}", err=True)
+    else:
+        typer.echo(rendered, nl=False)
+    typer.echo("Research use only; relative hazard is not recurrence probability.", err=True)
+
+
+@model_app.command("inspect")
+def model_inspect(
+    model: Path = typer.Option(..., "--model", help="Frozen JSON model bundle directory."),
+    output_format: str = typer.Option("table", "--format", help="table or json."),
+) -> None:
+    """Show verified model identity, domain, evidence and research-use limits."""
+    from hypoxiapipe.modeling.bundle import BundleError, load_model_bundle
+    from hypoxiapipe.modeling.inference_cli import inspect_metadata
+
+    try:
+        if output_format not in {"table", "json"}:
+            raise BundleError("inspect format must be table or json")
+        info = inspect_metadata(load_model_bundle(model))
+    except HypoxiapipeError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    if output_format == "json":
+        typer.echo(json.dumps(info, indent=2))
+    else:
+        for key, value in info.items():
+            typer.echo(f"{key}: {json.dumps(value) if isinstance(value, dict) else value}")
+
+
 if __name__ == "__main__":
     app()

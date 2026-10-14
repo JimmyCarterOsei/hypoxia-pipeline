@@ -102,6 +102,29 @@ run_cox_persd <- function(req) {
   out
 }
 
+# A fold-fitted Smith20 composite is already standardised with frozen training
+# statistics. Do not silently recompute those statistics in the R worker.
+run_cox_frozen <- function(req) {
+  out <- list()
+  for (nm in names(req$scores)) {
+    z <- as.numeric(req$scores[[nm]])
+    if (any(!is.finite(z)) || length(unique(z)) < 5) fail("invalid frozen score")
+    d <- data.frame(time=req$time, event=req$event, z=z)
+    fit <- tryCatch(withCallingHandlers(
+      coxph(Surv(time,event) ~ z, data=d, ties="efron", singular.ok=FALSE),
+      warning=function(w) stop(conditionMessage(w))),
+      error=function(e) fail(paste("frozen Cox fit failed:",conditionMessage(e))))
+    if (!is.finite(coef(fit)[1])) fail("nonfinite frozen Cox coefficient")
+    out[[length(out)+1]] <- cox_row(fit,"z",nm,"frozen",nrow(d),sum(d$event), list(
+      coefficient=unbox(unname(coef(fit)[1])),
+      se=unbox(unname(sqrt(vcov(fit)[1,1]))),
+      r_version=unbox(paste(R.version$major,R.version$minor,sep=".")),
+      survival_version=unbox(as.character(packageVersion("survival")))
+    ))
+  }
+  out
+}
+
 run_cox_multivariable <- function(req) {
   # Every score plus any covariates in one model: does a signature add
   # information beyond what is already on the table?
@@ -173,6 +196,7 @@ main <- function() {
 
   results <- switch(req$action,
     cox_persd         = run_cox_persd(req),
+    cox_frozen        = run_cox_frozen(req),
     cox_multivariable = run_cox_multivariable(req),
     quartile          = run_quartile(req),
     fail(paste0("unknown action: ", req$action))

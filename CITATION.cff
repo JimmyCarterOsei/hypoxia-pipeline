@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this research software, please cite this repository."
+type: software
+title: "hypoxiapipe: reproducible prostate-cancer transcriptomics and survival-model inference"
+authors:
+  - family-names: Osei
+    given-names: Jimmy Carter
+version: 0.1.0
+repository-code: "https://github.com/JimmyCarterOsei/hypoxia-pipeline"
+license: MIT

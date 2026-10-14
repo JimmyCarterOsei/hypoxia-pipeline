@@ -1,0 +1,23 @@
+{
+  "clinical_checksum": "sha256:f9bfa3ab554253c0b7a7cb00574f74d2bf1411decab2104ac1fb47bbd3329a8c",
+  "clinical": {
+    "n_source": 500,
+    "n_explicit_bcr": 109,
+    "n_timed_bcr": 102,
+    "n_untimed_bcr_excluded": 7,
+    "n_supported_censored": 383,
+    "n_unknown_excluded": 8,
+    "n_before_expression_match": 485,
+    "n_events_before_cap": 102,
+    "n_events_after_cap": 97,
+    "n_censored_by_cap": 5
+  },
+  "historical_expression_rds_sha256": "sha256:579795a93cf6ca80ccc9c50740aacdc574b80a210ee848c9ff8fe9c9f43fba99",
+  "expression_matched": {
+    "n_after_expression_match": 431,
+    "n_matched_events_before_cap": 96,
+    "n_matched_events_after_cap": 92,
+    "n_matched_censored_by_cap": 4
+  },
+  "note": "Counts verified against the Phase 9A audit. No source patient data is redistributed. The RDS is a regression input only, never the production expression source."
+}

@@ -126,7 +126,8 @@ def test_the_signature_replicates_out_of_sample():
     endpoint definition. This asserts direction and rough magnitude agree, not
     that the numbers match - they should not.
     """
-    external = [n for n in NAMES if n != "tcga-prad"]
+    # Both TCGA endpoints are discovery analyses, not external validation.
+    external = [n for n in NAMES if n not in {"tcga-prad", "tcga-prad-bcr"}]
     assert external, "no external cohorts to validate against"
 
     for name in external:

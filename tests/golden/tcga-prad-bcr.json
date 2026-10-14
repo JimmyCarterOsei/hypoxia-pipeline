@@ -1,0 +1,63 @@
+{
+  "_comment": [
+    "Actual offline cached GDC STAR build on 2026-09-25; not the historical RDS.",
+    "No clinical records or expression are redistributed. No survival model is pinned in Phase 9B."
+  ],
+  "recorded": "2026-09-25",
+  "source": "TCGA-PRAD saved clinical supplement XML + cached GDC STAR - Counts",
+  "spec": "tcga-prad-bcr",
+  "clinical_checksum": "sha256:f9bfa3ab554253c0b7a7cb00574f74d2bf1411decab2104ac1fb47bbd3329a8c",
+  "build": {
+    "manifest": {
+      "n_files": 554,
+      "checksum": "sha256:429843402b5e874a323c8a6d2b444a8a4282a9168644ab6814bde5a0fbb7d38e",
+      "retrieved_at": "2026-09-01T16:06:19+00:00",
+      "n_patients_in_manifest": 497
+    },
+    "selection": {
+      "n_dropped_non_primary": 53,
+      "n_patients_with_multiple_aliquots": 4,
+      "duplicate_aliquot_rule": "first",
+      "n_patients": 497
+    },
+    "join": {
+      "n_expression_patients": 497,
+      "n_clinical_patients": 485,
+      "n_joined": 483,
+      "n_expression_without_clinical": 14
+    },
+    "clinical_counts": {
+      "n_source": 500,
+      "n_explicit_bcr": 109,
+      "n_timed_bcr": 102,
+      "n_untimed_bcr_excluded": 7,
+      "n_supported_censored": 383,
+      "n_unknown_excluded": 8,
+      "n_no_negative_evidence": 5,
+      "n_negative_without_time": 3,
+      "n_before_expression_match": 485,
+      "n_events_before_cap": 102,
+      "n_events_after_cap": 97,
+      "n_censored_by_cap": 5,
+      "n_followup_capped": 50,
+      "n_after_expression_match": 483,
+      "n_matched_events_before_cap": 101,
+      "n_matched_events_after_cap": 97,
+      "n_matched_censored_by_cap": 4
+    }
+  },
+  "cohort": {
+    "n_samples": 483,
+    "n_events": 97,
+    "n_events_before_cap": 101,
+    "population_hash": "sha256:d9e702e02ffafa2d0ba56b3c4a548cfd75e137012185bdd070901b168053c30a",
+    "scale_max_min": 12.0,
+    "scale_max_max": 20.0
+  },
+  "coverage": {
+    "smith20": {
+      "n_found": 20,
+      "n_total": 20
+    }
+  }
+}

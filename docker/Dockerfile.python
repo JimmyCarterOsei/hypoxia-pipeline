@@ -32,7 +32,7 @@ RUN apt-get update \
 
 # Dependency metadata first, so a source-only change does not invalidate the
 # dependency layer.
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
 
 RUN python -m venv /opt/venv \

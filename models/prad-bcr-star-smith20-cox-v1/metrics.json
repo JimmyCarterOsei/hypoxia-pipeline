@@ -1,0 +1,48 @@
+{
+  "external_signature_evidence": {
+    "cohorts": {
+      "Cambridge": {
+        "events": 19,
+        "fitted_c": 0.650793650793651,
+        "hr": 1.79783561836008,
+        "n": 111
+      },
+      "MSKCC": {
+        "events": 24,
+        "fitted_c": 0.67184388689765,
+        "hr": 1.93741436069194,
+        "n": 131
+      },
+      "Stockholm": {
+        "events": 40,
+        "fitted_c": 0.597864768683274,
+        "hr": 1.73397500442924,
+        "n": 92
+      }
+    },
+    "interpretation": "external validation of cohort-relative Smith20 association, not external validation of the frozen STAR-native predictor"
+  },
+  "frozen_predictor_external_validation": false,
+  "full_cohort_apparent_fit": {
+    "ci_high": 2.203354653227,
+    "ci_low": 1.449553418913,
+    "coefficient": 0.5806182816932,
+    "fitted_c": 0.6814657743026,
+    "hr": 1.787143047062,
+    "interpretation": "apparent fit; not held-out predictive performance",
+    "se": 0.106819697355,
+    "wald_p": 5.464351114092e-08
+  },
+  "internal_repeated_nested_cv": {
+    "bootstrap_ci": [
+      0.6268756895759569,
+      0.7368932900712614
+    ],
+    "folds": 25,
+    "mean": 0.6825397634337843,
+    "median": 0.697560975609756,
+    "metric": "held-out Harrell C",
+    "sd": 0.0632903311309162,
+    "uncertainty": "patient-cluster bootstrap conditional on frozen outer predictions"
+  }
+}

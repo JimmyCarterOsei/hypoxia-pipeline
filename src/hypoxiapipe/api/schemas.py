@@ -11,7 +11,9 @@ from __future__ import annotations
 from typing import Any
 
 import pandas as pd
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from hypoxiapipe.signatures.registry import load_bundled
 
 MAX_GENES = 100_000
 MAX_SAMPLES = 5_000
@@ -119,7 +121,116 @@ class HealthResponse(BaseModel):
     """Liveness and configuration, for a load balancer or a curious human."""
 
     status: str
+    service: str = "hypoxiapipe"
     version: str
     n_signatures: int
     n_references: int
     r_available: bool
+    n_models: int = 0
+    models_ready: bool = False
+    model_registry_error: str | None = None
+    git_commit: str | None = None
+    image_tag: str | None = None
+    base_image: str | None = None
+
+
+class RecurrencePredictionRequest(BaseModel):
+    """Research-use inference on an explicitly declared genes x samples matrix."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "model_id": "prad-bcr-star-smith20-cox-v1",
+                    "expression_type": "gdc_star_tpm_log2p1_hgnc",
+                    "matrix": {
+                        "genes": list(load_bundled("smith20").genes),
+                        "samples": ["patient-001"],
+                        "values": [[1.0] for _ in load_bundled("smith20").genes],
+                    },
+                }
+            ]
+        }
+    )
+
+    model_id: str = Field(..., description="Registered model identifier, never a path or URL.")
+    expression_type: str = Field(
+        ...,
+        description=(
+            "Required for this model: gdc_star_tpm_log2p1_hgnc. "
+            "No domain is inferred from expression values."
+        ),
+    )
+    matrix: ExpressionMatrix = Field(
+        ..., description="Gene-symbol rows x patient sample columns; all 20 Smith20 genes required."
+    )
+
+
+class RecurrencePrediction(BaseModel):
+    """One sample's frozen-score and relative-hazard output."""
+
+    sample_id: str
+    smith20_score: float = Field(..., description="Standardized with frozen TCGA statistics.")
+    linear_predictor: float = Field(..., description="Cox coefficient times Smith20 score.")
+    relative_hazard: float = Field(..., description="exp(linear predictor), relative to score 0.")
+    training_percentile: float = Field(
+        ..., description="Rank in the TCGA development distribution."
+    )
+
+
+class RecurrenceProvenance(BaseModel):
+    """Immutable model and training-source identifiers."""
+
+    signature_checksum: str
+    scaler_checksum: str
+    population_hash: str
+    manifest_checksum: str
+    genes_used: list[str]
+
+
+class RecurrenceInterpretation(BaseModel):
+    """Limits on how the relative outputs may be read."""
+
+    relative_hazard: str
+    training_percentile: str
+
+
+class RecurrencePredictionResponse(BaseModel):
+    """Research-use prediction; no absolute recurrence probability is estimated."""
+
+    model_id: str
+    model_version: str
+    endpoint: str = Field(..., description="Locked longitudinal BCR endpoint.")
+    research_use_only: bool = Field(..., description="Always true for this unvalidated predictor.")
+    expression_type: str = Field(..., description="Declared compatible STAR expression domain.")
+    predictions: list[RecurrencePrediction]
+    provenance: RecurrenceProvenance
+    interpretation: RecurrenceInterpretation
+    limitation: str = Field(..., description="Independent predictor-validation limitation.")
+
+
+class ModelSummary(BaseModel):
+    """Public summary of a configured, integrity-checked model."""
+
+    model_id: str
+    version: str
+    estimator: str
+    endpoint: str
+    research_use_only: bool
+    expected_expression_type: str
+    n_features: int
+    training_n: int
+    training_events: int
+    external_predictor_validation: bool
+
+
+class ModelDetails(ModelSummary):
+    """Safe full model metadata, without local source paths."""
+
+    input_contract: dict[str, Any]
+    feature_genes: list[str]
+    internal_cv: dict[str, Any]
+    censoring_horizon_months: float
+    training_provenance: dict[str, str]
+    external_signature_evidence: dict[str, Any]
+    limitation: str

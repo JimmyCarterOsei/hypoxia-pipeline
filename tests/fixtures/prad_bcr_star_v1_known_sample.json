@@ -1,0 +1,29 @@
+{
+  "patient": "TCGA-2A-A8VL",
+  "expression_type": "gdc_star_tpm_log2p1_hgnc",
+  "gene_values": {
+    "ABCB6": 0.5272705568773409,
+    "ALDOA": 2.791709901694227,
+    "AMH": 0.4890290638504373,
+    "ANKZF1": 4.562712559327654,
+    "ANLN": 0.52697021440912,
+    "COL5A1": 3.2141869891437618,
+    "ESRP1": 5.902625943729929,
+    "FAM216A": 2.211386061679429,
+    "GAL3ST1": 0.8555113765744018,
+    "HMMR": 0.8732619953784867,
+    "IGFBP3": 4.250923687136575,
+    "KDM3A": 3.3576646008127002,
+    "LOXL2": 2.6925387883779552,
+    "PPFIA4": 0.2810750492774744,
+    "PPP2R5B": 4.160161864286934,
+    "SLC16A1": 4.821057079359034,
+    "SLC6A8": 5.119381079500948,
+    "STC2": 2.2471072220522763,
+    "WSB1": 6.1487206121532845,
+    "YEATS2": 3.0455128670835028
+  },
+  "archived_linear_predictor": -0.5802941224267887,
+  "archived_coefficient": 0.5806182816932,
+  "source": "pinned Phase 9B STAR cohort and Phase 9C.2 provisional full-fit apparent predictions"
+}

@@ -28,6 +28,7 @@ from typing import Any
 import pandas as pd
 
 from hypoxiapipe.errors import IngestError
+from hypoxiapipe.ingest import tcga_bcr
 from hypoxiapipe.ingest.cache import Cache
 from hypoxiapipe.ingest.cdr import check_endpoint, load_endpoint, read_cdr
 from hypoxiapipe.ingest.cohort import Cohort, Provenance
@@ -92,6 +93,9 @@ def load_tcga(
     # Check the clinical source before fetching ~2 GB of expression files. The
     # join happens last, so an unreadable CDR path would otherwise surface at
     # the end of a long download rather than at the start of one.
+    bcr_result = None
+    if spec.clinical_source == "tcga_bcr":
+        bcr_result = tcga_bcr.load_endpoint(str(spec.clinical_path), spec.clinical_checksum)
     if spec.clinical_source == "cdr":
         check_endpoint(project, spec.cdr_endpoint)
         read_cdr(str(spec.clinical_path))
@@ -138,7 +142,11 @@ def load_tcga(
     # range that tops out around 4 instead of ~15.
 
     # -- clinical + endpoint ----------------------------------------------
-    if spec.clinical_source == "cdr":
+    if bcr_result is not None:
+        clinical, bcr_report = bcr_result
+        report["endpoint"] = bcr_report.to_dict()
+        clinical_source_detail = {"clinical_source": "tcga_bcr", "path": str(spec.clinical_path)}
+    elif spec.clinical_source == "cdr":
         clinical, cdr_report = load_endpoint(
             str(spec.clinical_path),
             project,
@@ -174,6 +182,10 @@ def load_tcga(
         "n_joined": len(shared),
         "n_expression_without_clinical": int(expr.shape[1]) - len(shared),
     }
+
+    if bcr_result is not None:
+        bcr_report.record_expression_match(clinical, shared)
+        report["endpoint"] = bcr_report.to_dict()
 
     provenance = (
         Provenance(

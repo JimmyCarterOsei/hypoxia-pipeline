@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "hypoxiapipe"
 version = "0.1.0"
-description = "Reproducible transcriptomic signature scoring with content-addressed signature provenance"
+description = "Reproducible prostate cancer transcriptomics, Smith20 scoring, and research survival-model inference"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

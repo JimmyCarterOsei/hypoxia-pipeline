@@ -197,4 +197,5 @@ def test_the_offline_guard_is_actually_armed():
     import socket  # noqa: PLC0415
 
     with pytest.raises(RuntimeError, match="attempted a network connection"):
-        socket.create_connection(("ftp.ncbi.nlm.nih.gov", 443), timeout=1)
+        # A literal documentation-only address avoids DNS failing before the guard.
+        socket.create_connection(("203.0.113.1", 443), timeout=1)

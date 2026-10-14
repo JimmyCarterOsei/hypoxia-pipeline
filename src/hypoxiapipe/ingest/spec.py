@@ -80,6 +80,7 @@ class CohortSpec:
     primary_tumours_only: bool = True
     clinical_source: str = "gdc"
     clinical_path: str | None = None
+    clinical_checksum: str | None = None
     cdr_endpoint: str = "PFI"
     tolerate_file_failures: int = 0
 
@@ -94,9 +95,9 @@ class CohortSpec:
         if self.source == "local" and not self.path:
             raise IngestError(f"{self.name}: source 'local' requires a path")
         if self.source == "tcga":
-            if self.clinical_source not in {"gdc", "cdr"}:
+            if self.clinical_source not in {"gdc", "cdr", "tcga_bcr"}:
                 raise IngestError(
-                    f"{self.name}: clinical_source must be 'gdc' or 'cdr', "
+                    f"{self.name}: clinical_source must be 'gdc', 'cdr' or 'tcga_bcr', "
                     f"not {self.clinical_source!r}"
                 )
             if self.clinical_source == "cdr" and not self.clinical_path:
@@ -104,6 +105,19 @@ class CohortSpec:
                     f"{self.name}: clinical_source 'cdr' requires clinical_path pointing at "
                     "your copy of the TCGA-CDR table (it is not redistributed)"
                 )
+
+            if self.clinical_source == "tcga_bcr":
+                if self.accession != "TCGA-PRAD" or not self.clinical_path:
+                    raise IngestError("tcga_bcr requires TCGA-PRAD and clinical_path to saved XML")
+                if self.endpoint is not None and (
+                    self.endpoint.time_column != "time_months"
+                    or self.endpoint.event_column != "event"
+                    or self.endpoint.time_unit != "months"
+                    or self.endpoint.cap_months != 60
+                ):
+                    raise IngestError(
+                        "tcga_bcr uses derived time_months/event with a fixed 60-month cap"
+                    )
 
 
 def _parse(raw: dict[str, Any], origin: str) -> CohortSpec:
@@ -150,6 +164,7 @@ def _parse(raw: dict[str, Any], origin: str) -> CohortSpec:
         primary_tumours_only=bool(raw.get("primary_tumours_only", True)),
         clinical_source=str(raw.get("clinical_source", "gdc")),
         clinical_path=raw.get("clinical_path"),
+        clinical_checksum=raw.get("clinical_checksum"),
         cdr_endpoint=str(raw.get("cdr_endpoint", "PFI")),
         tolerate_file_failures=int(raw.get("tolerate_file_failures", 0)),
     )

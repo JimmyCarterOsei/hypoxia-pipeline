@@ -1,0 +1,13 @@
+{
+  "files": {
+    "environment.json": "sha256:88b2363718a6558599ae1d85c6a7066cae2d36eda1adf135dff1751e28ba1e71",
+    "features.json": "sha256:219fad2fb8dc5cf437665ca37fba0d6fa347d4ebd22373037e51b4acc8e02e85",
+    "metrics.json": "sha256:981c23ffc390d2cf9a9891842f8c9f6e5123e74ef99b3af72c471d00d506ecfd",
+    "model.json": "sha256:08d533cebb1ab1c5f31461e70307e16a9e627f18e1c2c872c737288cf0828c93",
+    "provenance.json": "sha256:15e4543aa6eab2e84b07d10e61b3c9e9d266c8778a858bde7f61caf89101e778",
+    "scaler.json": "sha256:4f3df0270d6ad80f93d26e802e14e1a36ca99d46e84315e6b80fd32b642a7183",
+    "training.json": "sha256:ae8fd8206b40c83fb6b1140a81e95419c0ce700ad533a887631fbd9516d9c625"
+  },
+  "model_id": "prad-bcr-star-smith20-cox-v1",
+  "version": "1.0.0"
+}

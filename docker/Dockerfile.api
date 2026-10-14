@@ -1,0 +1,62 @@
+# syntax=docker/dockerfile:1.7
+# Frozen research inference service. CI supplies a digest-pinned PYTHON_IMAGE;
+# the local default follows the Python-stage base family used by this repo.
+ARG PYTHON_IMAGE=python:3.12-slim-bookworm
+FROM ${PYTHON_IMAGE} AS build
+
+ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+WORKDIR /build
+COPY pyproject.toml README.md LICENSE ./
+COPY src ./src
+
+# The package's default dependencies support ingest and model development.
+# Inference/API needs only this pinned subset; never install a fitting stack.
+RUN python -m venv /opt/venv \
+ && /opt/venv/bin/pip install \
+      'numpy==2.5.2' 'pandas==3.0.5' 'PyYAML==6.0.3' \
+      'fastapi==0.141.1' 'uvicorn==0.52.4' \
+ && /opt/venv/bin/pip install --no-deps .
+
+ARG PYTHON_IMAGE=python:3.12-slim-bookworm
+FROM ${PYTHON_IMAGE} AS runtime
+
+ARG GIT_SHA=unknown
+ARG IMAGE_TAG=local
+ARG SOFTWARE_VERSION=0.1.0
+ARG PYTHON_IMAGE=python:3.12-slim-bookworm
+
+LABEL org.opencontainers.image.title="hypoxiapipe-api" \
+      org.opencontainers.image.description="Frozen STAR Smith20 Cox research API" \
+      org.opencontainers.image.source="https://github.com/JimmyCarterOsei/hypoxia-pipeline" \
+      org.opencontainers.image.version="${SOFTWARE_VERSION}" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.base.name="${PYTHON_IMAGE}" \
+      org.opencontainers.image.licenses="MIT"
+
+COPY --from=build /opt/venv /opt/venv
+RUN useradd --create-home --uid 10001 api \
+ && mkdir -p /app/models \
+ && chown -R api:api /app
+COPY --chown=api:api models/prad-bcr-star-smith20-cox-v1 /app/models/prad-bcr-star-smith20-cox-v1
+COPY --chown=api:api references /app/references
+
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HYPOXIAPIPE_MODELS=/app/models \
+    HYPOXIAPIPE_REFERENCES=/app/references \
+    HYPOXIAPIPE_BUILD_GIT_SHA="${GIT_SHA}" \
+    HYPOXIAPIPE_BASE_IMAGE="${PYTHON_IMAGE}" \
+    HYPOXIAPIPE_IMAGE_TAG="${IMAGE_TAG}"
+
+USER api
+WORKDIR /app
+EXPOSE 8000
+
+# Verify the JSON bundle during build, without performing a prediction.
+RUN python -c "from hypoxiapipe.api.models import list_models; assert len(list_models()) == 1"
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD python -c "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).status == 200" || exit 1
+
+CMD ["uvicorn", "hypoxiapipe.api.app:app", "--host", "0.0.0.0", "--port", "8000"]

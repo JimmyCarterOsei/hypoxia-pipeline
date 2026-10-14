@@ -13,6 +13,7 @@ dist/
 *.csv
 !tests/fixtures/*.tsv
 !src/hypoxiapipe/harmonise/data/*.tsv
+!docs/examples/recurrence-expression.tsv
 
 # Nextflow
 work/
@@ -23,7 +24,5 @@ results-latest/
 work-latest/
 tests/fixtures/workflow/cache/
 tests/fixtures/workflow/demo_cohort.yaml
-out/
-prad.yaml
 out/
 prad.yaml

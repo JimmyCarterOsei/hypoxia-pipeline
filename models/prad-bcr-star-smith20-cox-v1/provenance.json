@@ -1,0 +1,10 @@
+{
+  "clinical_source": "audited longitudinal TCGA-PRAD BCR",
+  "clinical_table_checksum": "sha256:d1e9424d95028ee77e91e97719ebd2a29e8389447d572b6a489a8bc072c6ef62",
+  "cohort_manifest_checksum": "sha256:ff38c60a22d5ad7a09169a6eb871e316fc0cdbf71b87dc204c3dc73f6efec07a",
+  "cv_comparison_checksum": "sha256:0234c3dfec65d3503d1c2e27df7bbb1da1277324c97fd15ed5b89b3bfd4609bb",
+  "expression_table_checksum": "sha256:a5b62d4ecc6c1af750ecb249cef801f5a815c23f7b629d97c737aa47ec19ec4b",
+  "external_reproduction_checksum": "sha256:3257d35079a6a01fc856fa006d889ca0af99bf636dfb773dbd8796d182242cd3",
+  "scaler_checksum": "sha256:fd178d541fdaa762a64248edf2c9025b2cbf22e17734a094c628ebef9d0aafcc",
+  "signature_checksum": "sha256:034a14859d93b10f9ec26c8244f3c1a4406d2e5d3616ad255c36fd9714d175b6"
+}

@@ -24,6 +24,9 @@ the old one, so the trail shows what was believed and when.
 | [0011](0011-duckdb-deferred.md) | The DuckDB layer is deferred until something queries it | Accepted |
 | [0012](0012-implausible-counts-are-checked.md) | Counts are checked for plausibility, not only for consistency | Accepted |
 | [0013](0013-single-sample-scoring-is-refused.md) | Single-sample scoring is refused, not approximated | Accepted |
+| [0014](0014-longitudinal-prad-bcr-is-a-separate-cohort.md) | Longitudinal PRAD BCR uses explicit record-level evidence in a separate cohort | Accepted |
+| [0015](0015-molecular-models-use-shared-nested-validation.md) | Molecular models share repeated nested validation on the locked STAR BCR cohort | Accepted |
+| [0016](0016-freeze-star-smith20-cox-research-v1.md) | Freeze STAR Smith20 Cox as the first research-use predictor | Accepted |
 
 ## Format
 

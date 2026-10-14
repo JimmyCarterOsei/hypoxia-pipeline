@@ -25,13 +25,14 @@ is tested rather than asserted in a comment.
 from __future__ import annotations
 
 import warnings
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, StratifiedKFold
 from sksurv.ensemble import RandomSurvivalForest
 from sksurv.linear_model import CoxnetSurvivalAnalysis
 from sksurv.metrics import concordance_index_censored
@@ -39,10 +40,12 @@ from sksurv.util import Surv
 
 from hypoxiapipe.errors import HypoxiapipeError
 from hypoxiapipe.modeling.preprocessing import ReferenceScaler
+from hypoxiapipe.modeling.rbridge import FrozenCox
 from hypoxiapipe.provenance.hashing import hash_json
+from hypoxiapipe.signatures.registry import load_bundled
 
 DEFAULT_ALPHAS = (1.0, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005)
-ESTIMATORS = ("coxnet", "rsf")
+ESTIMATORS = ("coxnet", "rsf", "smith20_cox")
 
 
 class ModelingError(HypoxiapipeError):
@@ -63,19 +66,24 @@ def to_structured(time: Any, event: Any) -> Any:
     return structured
 
 
-def make_estimator(kind: str, alpha: float | None = None, seed: int = 0) -> Any:
-    """Construct an estimator by name."""
+def make_estimator(kind: str, alpha: float | None = None, seed: int = 0, **params: Any) -> Any:
+    """Construct a molecular estimator without fitting any preprocessing."""
+    if kind == "smith20_cox":
+        return FrozenCox()
     if kind == "coxnet":
         return CoxnetSurvivalAnalysis(
-            l1_ratio=0.9,
+            l1_ratio=params.get("l1_ratio", 0.9),
             alphas=[alpha] if alpha is not None else None,
             fit_baseline_model=False,
+            normalize=False,
+            max_iter=100000,
+            tol=1e-7,
         )
     if kind == "rsf":
         return RandomSurvivalForest(
-            n_estimators=200,
-            min_samples_leaf=5,
-            max_features="sqrt",
+            n_estimators=params.get("n_estimators", 200),
+            min_samples_leaf=params.get("min_samples_leaf", 5),
+            max_features=params.get("max_features", "sqrt"),
             random_state=seed,
             n_jobs=1,
         )
@@ -116,6 +124,8 @@ class FoldResult:
     c_index: float
     n_features_selected: int | None = None
     scaler_checksum: str = ""
+    repeat: int = 1
+    selected_params: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -125,6 +135,12 @@ class CVResult:
     estimator: str
     folds: list[FoldResult] = field(default_factory=list)
     params: dict[str, Any] = field(default_factory=dict)
+    splits: list[dict[str, Any]] = field(default_factory=list)
+    predictions: list[dict[str, Any]] = field(default_factory=list)
+    coefficients: list[dict[str, Any]] = field(default_factory=list)
+    training: list[dict[str, Any]] = field(default_factory=list)
+    tuning: list[dict[str, Any]] = field(default_factory=list)
+    importance: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def c_index_mean(self) -> float:
@@ -215,6 +231,219 @@ def _select_alpha(
     return max(mean_scores, key=lambda a: mean_scores[a])
 
 
+def molecular_data(
+    features: pd.DataFrame, time: Any, event: Any, genes: tuple[str, ...] | None = None
+) -> tuple[pd.DataFrame, Any]:
+    """Enforce feature names and align labeled outcomes before canonical sorting.
+
+    Positional arrays are accepted for the legacy API; labeled Series must have
+    exactly the feature sample IDs and are explicitly reindexed. Extra genes
+    are ignored only when an explicit feature contract is supplied.
+    """
+    if not features.columns.is_unique or not features.index.is_unique:
+        raise ModelingError("duplicate gene or sample labels")
+    if not all(isinstance(v, str) for v in features.columns):
+        raise ModelingError("sample IDs must be strings")
+    contract = genes if genes is not None else tuple(str(g) for g in features.index)
+    if not contract or len(set(contract)) != len(contract):
+        raise ModelingError("feature contract must contain unique gene names")
+    missing = [g for g in contract if g not in features.index]
+    if missing:
+        raise ModelingError(f"missing required genes: {missing}")
+    if features.shape[1] != len(time) or features.shape[1] != len(event):
+        raise ModelingError("genes x samples matrix and outcomes have different lengths")
+    aligned = []
+    for values in (time, event):
+        if isinstance(values, pd.Series):
+            if not values.index.is_unique or set(values.index) != set(features.columns):
+                raise ModelingError("outcome sample IDs do not match expression")
+            values = values.reindex(features.columns).to_numpy()
+        aligned.append(np.asarray(values))
+    structured = to_structured(*aligned)
+    order = np.argsort(features.columns.to_numpy())
+    matrix = features.loc[list(contract)].iloc[:, order].astype(float)
+    if not np.isfinite(matrix.to_numpy()).all():
+        raise ModelingError("required expression values must be finite; no silent imputation")
+    return matrix, structured[order]
+
+
+def plan_cv(
+    samples: list[str],
+    event: Any,
+    outer_splits: int = 5,
+    inner_splits: int = 5,
+    repeats: int = 5,
+    seed: int = 902001,
+) -> list[dict[str, Any]]:
+    """Plan stratified nested folds using only canonical IDs and event indicators."""
+    if samples != sorted(samples) or len(set(samples)) != len(samples):
+        raise ModelingError("split planning requires unique sorted sample IDs")
+    event = np.asarray(event, dtype=int)
+    if len(event) != len(samples) or not np.isin(event, (0, 1)).all():
+        raise ModelingError("invalid split event indicators")
+    if min(outer_splits, inner_splits) < 2 or repeats < 1:
+        raise ModelingError("need at least two folds and one repeat")
+    if min(np.bincount(event, minlength=2)) < outer_splits * 2:
+        raise ModelingError("too few to fit stratified outer folds: events or censored patients")
+    ids = np.asarray(samples)
+    plans = []
+    for repeat in range(repeats):
+        outer = StratifiedKFold(outer_splits, shuffle=True, random_state=seed + repeat)
+        for fold, (tr, te) in enumerate(outer.split(ids, event), 1):
+            inner_seed = seed + 1000 + 100 * repeat + fold
+            model_seed = seed + 10000 + 100 * repeat + fold
+            if min(np.bincount(event[tr], minlength=2)) < inner_splits:
+                raise ModelingError("too few training outcomes for inner stratification")
+            inner = StratifiedKFold(inner_splits, shuffle=True, random_state=inner_seed)
+            plans.append(
+                {
+                    "repeat": repeat + 1,
+                    "fold": fold,
+                    "outer_seed": seed + repeat,
+                    "inner_seed": inner_seed,
+                    "model_seed": model_seed,
+                    "train": ids[tr].tolist(),
+                    "test": ids[te].tolist(),
+                    "inner": [
+                        {"train": ids[tr][a].tolist(), "validation": ids[tr][b].tolist()}
+                        for a, b in inner.split(tr, event[tr])
+                    ],
+                }
+            )
+    return plans
+
+
+def fit_partition(
+    features: pd.DataFrame,
+    structured: Any,
+    estimator: str,
+    params: dict[str, Any],
+    seed: int,
+) -> FittedModel:
+    """Fit one already-aligned training partition; never receive test samples."""
+    if estimator == "smith20_cox" and tuple(features.index) != tuple(load_bundled("smith20").genes):
+        raise ModelingError("fixed Smith20 requires its exact ordered 20-gene contract")
+    scaler = ReferenceScaler().fit(features)
+    if scaler.detail["n_zero_variance"]:
+        raise ModelingError("zero-variance training gene in the fixed feature contract")
+    x = scaler.transform(features).T.to_numpy(dtype=float)
+    composite_mean, composite_sd = 0.0, 1.0
+    if estimator == "smith20_cox":
+        raw = x.mean(axis=1)
+        composite_mean, composite_sd = float(raw.mean()), float(raw.std(ddof=1))
+        if not np.isfinite(composite_sd) or composite_sd <= 1e-8:
+            raise ModelingError("degenerate fixed-signature composite")
+        x = ((raw - composite_mean) / composite_sd)[:, None]
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        arguments = dict(params)
+        alpha = arguments.pop("alpha", None)
+        model = make_estimator(estimator, alpha=alpha, seed=seed, **arguments).fit(x, structured)
+    messages = tuple(str(w.message) for w in caught)
+    serious = [m for m in messages if "all coefficients are zero" not in m]
+    if serious:
+        raise ModelingError(f"fit warnings: {serious}")
+    if not np.isfinite(_risk_scores(model, x)).all():
+        raise ModelingError("nonfinite training predictions")
+    return FittedModel(
+        estimator,
+        model,
+        scaler,
+        alpha,
+        features.shape[1],
+        composite_mean=composite_mean,
+        composite_sd=composite_sd,
+        selected_params=dict(params),
+        warnings=messages,
+    )
+
+
+def select_parameters(
+    features: pd.DataFrame,
+    structured: Any,
+    estimator: str,
+    candidates: list[dict[str, Any]],
+    inner: list[dict[str, Any]],
+    seed: int,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Tune on training-only inner folds, rejecting incomplete candidate evaluations.
+
+    Exact ties retain the first prespecified candidate. An all-zero CoxNet is
+    a valid constant-risk candidate; convergence warnings are not silently used.
+    """
+    if not candidates:
+        raise ModelingError("empty parameter search")
+    if estimator == "smith20_cox":
+        return {}, []
+    pos = {s: i for i, s in enumerate(features.columns)}
+    evaluations: list[dict[str, Any]] = []
+    for number, params in enumerate(candidates):
+        scores: list[float] = []
+        failures: list[str] = []
+        messages: list[str] = []
+        for fold, split in enumerate(inner, 1):
+            tr, va = split["train"], split["validation"]
+            if set(tr) & set(va) or set(tr) | set(va) != set(pos):
+                raise ModelingError("inner split crosses its training population")
+            try:
+                fitted = fit_partition(
+                    features[tr], structured[[pos[i] for i in tr]], estimator, params, seed + fold
+                )
+                scores.append(
+                    _c_index(
+                        structured[[pos[i] for i in va]], fitted.predict(features[va]).to_numpy()
+                    )
+                )
+                messages.extend(fitted.warnings)
+            except (ValueError, ArithmeticError, ModelingError) as exc:
+                failures.append(f"inner fold {fold}: {exc}")
+        evaluations.append(
+            {
+                "candidate": number,
+                "params": params,
+                "inner_c": scores,
+                "valid": not failures and len(scores) == len(inner),
+                "mean_c": float(np.mean(scores)) if not failures and scores else None,
+                "failures": failures,
+                "warnings": messages,
+            }
+        )
+    valid = [e for e in evaluations if e["valid"]]
+    if not valid:
+        raise ModelingError(f"no candidate completed every inner fold: {evaluations}")
+    winner = max(valid, key=lambda row: row["mean_c"])
+    return dict(winner["params"]), evaluations
+
+
+def evaluate_fold(
+    features: pd.DataFrame,
+    structured: Any,
+    estimator: str,
+    split: dict[str, Any],
+    candidates: list[dict[str, Any]],
+) -> tuple[FittedModel, np.ndarray, list[dict[str, Any]]]:
+    """Tune and fit on outer training IDs, then apply frozen preprocessing to test IDs."""
+    pos = {s: i for i, s in enumerate(features.columns)}
+    tr, te = split["train"], split["test"]
+    if set(tr) & set(te) or set(tr) | set(te) != set(pos):
+        raise ModelingError("outer split does not partition the population")
+    for group in [tr, te]:
+        if len(group) != len(set(group)):
+            raise ModelingError("duplicate IDs in outer split")
+    for inner in split["inner"]:
+        a, b = inner["train"], inner["validation"]
+        if set(a) & set(b) or set(a) | set(b) != set(tr):
+            raise ModelingError("inner split crosses its training population")
+        if len(a) != len(set(a)) or len(b) != len(set(b)):
+            raise ModelingError("duplicate IDs in inner split")
+    train, y_train = features[tr], structured[[pos[i] for i in tr]]
+    params, tuning = select_parameters(
+        train, y_train, estimator, candidates, split["inner"], split["model_seed"]
+    )
+    fitted = fit_partition(train, y_train, estimator, params, split["model_seed"])
+    return fitted, fitted.predict(features[te]).to_numpy(), tuning
+
+
 def nested_cv(
     features: pd.DataFrame,
     time: Any,
@@ -224,90 +453,117 @@ def nested_cv(
     inner_splits: int = 3,
     alphas: tuple[float, ...] = DEFAULT_ALPHAS,
     seed: int = 0,
+    *,
+    repeats: int = 1,
+    genes: tuple[str, ...] | None = None,
+    candidates: list[dict[str, Any]] | None = None,
+    splits: list[dict[str, Any]] | None = None,
+    permutation_repeats: int = 0,
+    progress: Callable[[FoldResult], None] | None = None,
 ) -> CVResult:
-    """Run nested cross-validation with per-fold frozen preprocessing.
+    """Run repeated stratified nested CV with named, frozen training-only transforms.
 
-    Parameters
-    ----------
-    features : pd.DataFrame
-        Genes x samples, matching the pipeline's orientation throughout.
-    time : array-like
-        Follow-up time, strictly positive.
-    event : array-like
-        Event indicator coded 0/1.
-    estimator : str
-        ``coxnet`` or ``rsf``.
-    outer_splits : int
-        Outer folds; each scores the whole selection procedure on unseen data.
-    inner_splits : int
-        Inner folds used only to choose the penalty (``coxnet`` only).
-    alphas : tuple[float, ...]
-        Penalty grid searched by the inner loop.
-    seed : int
-        Seed for fold assignment and the forest.
-
+    ``splits`` permits the identical precommitted plan across estimators. The
+    historical API remains supported; result exports now include outer risks,
+    inner search records, coefficients and training statistics. No model is saved.
     """
     if estimator not in ESTIMATORS:
-        raise ModelingError(f"unknown estimator {estimator!r} (choose from {ESTIMATORS})")
-    structured = to_structured(time, event)
-    if features.shape[1] != len(structured):
-        raise ModelingError(
-            f"features has {features.shape[1]} samples but {len(structured)} outcomes; "
-            "the matrix must be genes x samples with columns aligned to the endpoint"
+        raise ModelingError(f"unknown estimator {estimator!r}")
+    if estimator == "smith20_cox":
+        genes = tuple(load_bundled("smith20").genes)
+    features, structured = molecular_data(features, time, event, genes)
+    plans = (
+        splits
+        if splits is not None
+        else plan_cv(
+            list(features.columns), structured["event"], outer_splits, inner_splits, repeats, seed
         )
-    n_events = int(structured["event"].sum())
-    if n_events < outer_splits * 2:
-        raise ModelingError(
-            f"{n_events} events across {outer_splits} outer folds is too few to fit; "
-            "reduce the folds or report a single fitted model with its caveats instead"
+    )
+    if candidates is None:
+        candidates = (
+            [{"alpha": a, "l1_ratio": 0.9} for a in alphas] if estimator == "coxnet" else [{}]
         )
-
-    outer = KFold(n_splits=outer_splits, shuffle=True, random_state=seed)
     result = CVResult(
-        estimator=estimator,
+        estimator,
         params={
             "outer_splits": outer_splits,
             "inner_splits": inner_splits,
-            "alphas": list(alphas) if estimator == "coxnet" else None,
+            "repeats": repeats,
             "seed": seed,
-            "n_genes": int(features.shape[0]),
-            "n_samples": int(features.shape[1]),
-            "n_events": n_events,
+            "n_genes": features.shape[0],
+            "n_samples": features.shape[1],
+            "n_events": int(structured["event"].sum()),
+            "candidates": candidates,
+            "split_hash": hash_json(plans),
+            "genes": list(features.index),
+            "permutation_repeats": permutation_repeats,
         },
+        splits=plans,
     )
-
-    for fold, (train_idx, test_idx) in enumerate(outer.split(features.T), start=1):
-        train = features.iloc[:, train_idx]
-        test = features.iloc[:, test_idx]
-        y_train, y_test = structured[train_idx], structured[test_idx]
-
-        # Fitted on the training half only, then frozen for the test half.
-        scaler = ReferenceScaler().fit(train)
-        x_train = scaler.transform(train).T.to_numpy(dtype=float)
-        x_test = scaler.transform(test).T.to_numpy(dtype=float)
-
-        alpha = None
-        if estimator == "coxnet":
-            alpha = _select_alpha(train, y_train, alphas, inner_splits, seed)
-        model = make_estimator(estimator, alpha=alpha, seed=seed).fit(x_train, y_train)
-
-        selected = None
-        if estimator == "coxnet":
-            selected = int(np.count_nonzero(np.asarray(model.coef_).ravel()))
-
-        result.folds.append(
-            FoldResult(
-                fold=fold,
-                estimator=estimator,
-                alpha=alpha,
-                n_train=len(train_idx),
-                n_test=len(test_idx),
-                n_test_events=int(y_test["event"].sum()),
-                c_index=_c_index(y_test, _risk_scores(model, x_test)),
-                n_features_selected=selected,
-                scaler_checksum=scaler.checksum,
-            )
+    pos = {s: i for i, s in enumerate(features.columns)}
+    for split in plans:
+        fitted, risk, tuning = evaluate_fold(features, structured, estimator, split, candidates)
+        test = split["test"]
+        y_test = structured[[pos[s] for s in test]]
+        c = _c_index(y_test, risk)
+        fold = FoldResult(
+            split["fold"],
+            estimator,
+            fitted.alpha,
+            fitted.n_train,
+            len(test),
+            int(y_test["event"].sum()),
+            c,
+            fitted.n_selected,
+            fitted.scaler.checksum,
+            split["repeat"],
+            fitted.selected_params,
         )
+        result.folds.append(fold)
+        key = {"repeat": split["repeat"], "fold": split["fold"]}
+        result.tuning.extend({**key, **row} for row in tuning)
+        result.training.append(
+            {
+                **key,
+                **fitted.to_dict(),
+                "scaler": fitted.scaler.to_dict(),
+                "warnings": list(fitted.warnings),
+            }
+        )
+        result.predictions.extend(
+            {
+                **key,
+                "patient": patient,
+                "time": float(y["time"]),
+                "event": int(y["event"]),
+                "risk": float(value),
+            }
+            for patient, y, value in zip(test, y_test, risk, strict=True)
+        )
+        coef = getattr(fitted.model, "coef_", None)
+        if coef is not None:
+            names = ["fixed_smith20_score"] if estimator == "smith20_cox" else features.index
+            result.coefficients.extend(
+                {**key, "feature": str(g), "coefficient": float(b)}
+                for g, b in zip(names, np.asarray(coef).ravel(), strict=True)
+            )
+        if estimator == "rsf" and permutation_repeats:
+            rng = np.random.default_rng(split["model_seed"] + 30000)
+            for gene in features.index:
+                for permutation in range(permutation_repeats):
+                    changed = features[test].copy()
+                    changed.loc[gene] = rng.permutation(changed.loc[gene].to_numpy())
+                    score = _c_index(y_test, fitted.predict(changed).to_numpy())
+                    result.importance.append(
+                        {
+                            **key,
+                            "gene": str(gene),
+                            "permutation": permutation + 1,
+                            "c_drop": c - score,
+                        }
+                    )
+        if progress is not None:
+            progress(fold)
     return result
 
 
@@ -321,6 +577,10 @@ class FittedModel:
     alpha: float | None
     n_train: int
     train_population_hash: str | None = None
+    composite_mean: float = 0.0
+    composite_sd: float = 1.0
+    selected_params: dict[str, Any] = field(default_factory=dict)
+    warnings: tuple[str, ...] = ()
 
     @property
     def n_selected(self) -> int | None:
@@ -336,7 +596,12 @@ class FittedModel:
         make the prediction depend on who else happened to be measured.
         """
         scaled = self.scaler.transform(matrix, strict=strict)
-        risk = _risk_scores(self.model, scaled.T.to_numpy(dtype=float))
+        values = scaled.T.to_numpy(dtype=float)
+        if not np.isfinite(matrix.loc[list(self.scaler.genes)].to_numpy(dtype=float)).all():
+            raise ModelingError("required expression values must be finite")
+        if self.estimator == "smith20_cox":
+            values = ((values.mean(axis=1) - self.composite_mean) / self.composite_sd)[:, None]
+        risk = _risk_scores(self.model, values)
         return pd.Series(risk, index=matrix.columns, name=f"{self.estimator}_risk")
 
     def to_dict(self) -> dict[str, Any]:
@@ -349,6 +614,10 @@ class FittedModel:
             "n_features_selected": self.n_selected,
             "scaler_checksum": self.scaler.checksum,
             "train_population_hash": self.train_population_hash,
+            "selected_params": self.selected_params,
+            "composite_mean": self.composite_mean,
+            "composite_sd": self.composite_sd,
+            "backend_detail": getattr(self.model, "detail", None),
         }
 
 
@@ -368,6 +637,11 @@ def fit_final(
     Report the nested-CV estimate as the model's expected performance; this
     model's fit to its own training data is not an estimate of anything.
     """
+    if estimator == "smith20_cox":
+        ordered, outcomes = molecular_data(
+            features, time, event, tuple(load_bundled("smith20").genes)
+        )
+        return fit_partition(ordered, outcomes, estimator, {}, seed)
     structured = to_structured(time, event)
     if estimator == "coxnet" and alpha is None:
         alpha = _select_alpha(features, structured, alphas, inner_splits, seed)
